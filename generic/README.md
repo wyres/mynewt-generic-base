@@ -1,6 +1,6 @@
-# Sample Package Definition
+# Wyres generic modules Package Definition
 
-This is a basic definition of a sample Mynewt package.
+This is the package containing the generic firmware modules used in Wyres objects.
 
 The source files are located in the src/ directory.
 

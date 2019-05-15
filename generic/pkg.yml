@@ -17,10 +17,11 @@
 # under the License.
 #
 
+pkg.type: pkg
 pkg.name: "generic"
-pkg.description: "Description of your package"
-pkg.author: "You <you@you.org>"
-pkg.homepage: "http://your-url.org/"
+pkg.description: "Utility and core modules for Wyres firmware"
+pkg.author: "support@wyres.fr"
+pkg.homepage: "http://www.wyres.fr/"
 pkg.keywords:
 
 pkg.deps:
