@@ -17,7 +17,7 @@
 # under the License.
 #
 
-pkg.type: pkg
+#pkg.type: pkg
 pkg.name: "generic"
 pkg.description: "Utility and core modules for Wyres firmware"
 pkg.author: "support@wyres.fr"
