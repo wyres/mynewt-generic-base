@@ -19,7 +19,7 @@ extern "C" {
 #if MYNEWT_VAL(OS_CRASH_FILE_LINE)
     #define assert(__e) ((__e) ? (void)0 : wassert_fn(__FILE__, __LINE__))
 #else
-    #define assert(__e) ((__e) ? (void)0 : wassert_fn(__FILE__, __LINE__))
+    #define assert(__e) ((__e) ? (void)0 : wassert_fn(NULL, 0))
 #endif
 #define log_debug log_debug_fn
 #define log_warn log_warn_fn

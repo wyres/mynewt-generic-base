@@ -53,9 +53,12 @@ void wassert_fn(const char* file, int lnum) {
         }
     }
 }
-/**
+/*
+// This is the assert fn mapped to by OS_CRASH() which is mapped by the system assert.h in mynewt
 void __assert_func(const char *file, int line, const char *func, const char *e) {
-    wassert_fn(0,line);
+    wassert_fn(NULL,line);
+    // actually wassert_fn never returns
+    exit(-1);
 }
 */
 

@@ -80,6 +80,11 @@ SM_ID_t sm_init(const char* name, SM_STATE_t* states, uint8_t sz, SM_STATE_ID_t 
     return sm;
 }
 
+// PULBIC : start a start machine
+bool sm_start(SM_ID_t id) {
+    return sm_sendEvent(id, SM_ENTER, NULL);    
+}
+
 // PUBLIC : send an event to a state machine (called from ext or int)
 bool sm_sendEvent(SM_ID_t id, int e, void* data) {
     if (circListFull(_sm_event_list_head, _sm_event_list_tail, SM_MAX_EVENTS)) {

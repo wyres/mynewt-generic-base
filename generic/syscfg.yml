@@ -1,0 +1,61 @@
+syscfg.defs:
+    # task priorities : lower is higher priority : NOTE : MUST NOT HAVE 2 TASKS WITH SAME PRIO OR SYSTEM FAULT
+    SM_TASK_PRIO:
+        description: "state machine execution task priority"
+        value: 199
+    LORAAPP_TASK_PRIO:
+        description: "Wyres lorawan wrapper task priority"
+        value: 102
+    WBLE_TASK_PRIO:
+        description: "Wyres ble reception and parsing task priority"
+        value: 101
+    GPS_TASK_PRIO:
+        description: "GPS reception and parsing task priority"
+        value: 100
+    UART_TASK_PRIO:
+        description: "UART comm task priority"
+        value: 99
+    L96COMM_TASK_PRIO:
+        description: "L96 comm driver task priority"
+        value: 98
+    LEDMGR_TASK_PRIO:
+        description: "led manager task priority"
+        value: 19
+    WATCHDOG_TASK_PRIO:
+        description: "watchdog task priority"
+        value: 9
+
+    MAX_LEDS:
+        description: "Max number of leds in this system"
+        value: 2
+    MAX_GPIOS:
+        description: "Max number of GPIOs in this system"
+        value: 32
+    MAX_NB_L96:
+        description: "max number of L96s in the system"
+        value: 1
+    MAX_UARTS:
+        description: "max number of UARTS in the system"
+        value: 3
+    MAX_WSKTS:
+        description: "max open simultaneous sockets"
+        value: 32
+    MAX_WSKT_DEVICES:
+        description: "max wskt managed devices"
+        value: 8
+    MAX_LPCBFNS:
+        description: "max low power mode cbs"
+        value: 8
+    MAX_MMCBFNS:
+        description: "max movement cbs"
+        value: 8
+    WSKT_BUF_SZ:
+        description: "size of buffers used for RX in wskts"
+        value: 256
+    SM_MAX_EVENTS:
+        description: "max outstanding events for state machines"
+        value: 16
+    SM_MAX_SMS:
+        description: "max state machines"
+        value: 4
+        

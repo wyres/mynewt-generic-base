@@ -10,14 +10,18 @@
 extern "C" {
 #endif
 
-// Initial events list. Each SM can create its own enum of events, with its initial element starting at (SM_EXT+1)
-// eg enum myEvents { TOTO=(SM_EXT+1), TITI, TATA };
-typedef enum { SM_ENTER, SM_EXIT, SM_TIMEOUT, SM_EXT } SM_EVENT_TYPE_t;
+// Standard events list. Each SM should add its own enum of event ids, with its initial element starting at 0 (and not more than 9999!)
+// eg 
+// enum MyEvents { ME_GPS_FIX, ME_BLE_SCAN_DONE, ME_LORA_RESULT };
+typedef enum { SM_ENTER=10000, SM_EXIT, SM_TIMEOUT } SM_EVENT_TYPE_t;
+
 //State ids are in the entry in the table of states. Each value must be unique.
+// eg : 
 // enum MyStates { MS_IDLE, MS_GETTING_GPS, MS_GETTING_BLE, MS_LAST };
 typedef int8_t SM_STATE_ID_t;
 // Special value to return to stay in same state
 #define SM_STATE_CURRENT (-1)
+
 // Each state's function must return the id of the next state to transition, or the value SM_STATE_CURRENT to stay in the same one
 // Note that the event 'e' is an int as the event list (SM_EVENT_TYEP_t) can be extended for each SM
 // NOTE : for ENTER and EXIT events, no state change is allowed (returned value is ignored).
@@ -30,13 +34,24 @@ typedef struct {
 
 typedef void* SM_ID_t;      // Id is actually pointer to internal struct
 
-/* Caller is responsible for building the array of state fns as a static structure. The id for a state is its index in the table.
- * Start your state machine by doing 
- * sm_sendEvent(id, SM_ENTER, NULL):
- * which calls the initialState function with ENTER event
+/* Caller is responsible for building the array of state fns as a static structure. (MUST BE STATIC FOR LIFETIME OF EXECUTION)
+ * The order is not important, only the mapping between the .id and the .fn.
+ * eg:
+SM_STATE_t _mySM[MS_LAST] = {
+    {.id=MS_IDLE, .name="Idle", .fn=State_Idle},
+    {.id=MS_GETTING_GPS, .name="GettingGPS", .fn=State_GettingGPS},
+    {.id=MS_GETTING_BLE, .name="GettingBLE", .fn=State_GettingBLE},    
+    {.id=MS_SENDING_DM, .name="SendingDM", .fn=State_SendingDM},    
+};
+ * Call sm_init() with with this table, its size, and the initial state.
  */
 SM_ID_t sm_init(const char* name, SM_STATE_t* stateTable, uint8_t sz, SM_STATE_ID_t initialState);
-
+/*
+ * To start your state machine do 
+sm_start(id):
+ * which calls the function associated with the 'initialState' id with an ENTER event.
+ */
+bool sm_start(SM_ID_t id);
 // Send an event to the given state machine. Note that e is an int as the event list can be extended
 bool sm_sendEvent(SM_ID_t id, int e, void* data);
 // Start a timer for tms milliseconds. This will generate a SM_TIMEOUT event.
