@@ -48,7 +48,8 @@ void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect) {
     _uartSelect=uartSelect;
     _pwrPin = pwrPin;
     if (_pwrPin>=0) {
-        GPIO_define_out("gpspower", _pwrPin, 0, LP_DEEPSLEEP);
+        // Note 1 is OFF so start with it off
+        GPIO_define_out("gpspower", _pwrPin, 1, LP_DEEPSLEEP);
     }
     // mutex for data access
     os_mutex_init(&_dataMutex);
@@ -86,7 +87,10 @@ void gps_start(GPS_CB_FN_t cbfn) {
     _cbfn = cbfn;
     // Power up using power pin
     if (_pwrPin>=0) {
-        GPIO_write(_pwrPin, 1);
+        log_debug("gps power ON using pin %d", _pwrPin);
+        GPIO_write(_pwrPin, 0);     // yup pull down for ON
+    } else {
+        log_debug("gps poweralways on?");
     }
     // Select it as UART device (if required)
     if (_uartSelect>=0) {
@@ -95,7 +99,12 @@ void gps_start(GPS_CB_FN_t cbfn) {
     // initialise comms to the gps via the uart like comms device defined in syscfg
     _cnx = wskt_open(_uartDevice, &_myGPSEvent, &_gpsMgrEQ);
     assert(_cnx!=NULL);
-
+    // Set baud rate
+    wskt_ioctl_t cmd = {
+        .cmd = IOCTL_SET_BAUD,
+        .param = MYNEWT_VAL(GPS_UART_BAUDRATE),
+    };
+    wskt_ioctl(_cnx, &cmd);
     // Don't need to write to anything
 }
 void gps_stop() {
@@ -103,7 +112,8 @@ void gps_stop() {
         wskt_close(&_cnx);
     }
     if (_pwrPin>=0) {
-        GPIO_write(_pwrPin, 0);
+        log_debug("gps power OFF using pin %d", _pwrPin);
+        GPIO_write(_pwrPin, 1);
     }
     _cbfn = NULL;
 }
@@ -119,12 +129,16 @@ static void gps_mgr_task(void* arg) {
 static void gps_mgr_rxcb(struct os_event* ev) {
     // ev->arg is our line buffer
     const char* line = (char*)(ev->ev_arg);
-    log_debug("received input [%s]", line);
+//    log_debug("received input [%s]", line);
+    if (strnlen(line, 10)<10) {
+        // too short line ignore
+        return;
+    }
     // parse it
     gps_data_t newdata;
     // if unparseable then tell cb
     if (!parseNEMA(line, &newdata)) {
-        log_debug("bad gps line");
+//        log_debug("bad gps line");
         if (_cbfn!=NULL) {
             (*_cbfn)(GPS_FAIL);
         }
@@ -159,7 +173,7 @@ static void gps_mgr_rxcb(struct os_event* ev) {
             }
         }
     } else {
-        log_debug("ok gps line but not new fix");
+        log_debug("ok gps not fix");
     }
     // and continue
 }

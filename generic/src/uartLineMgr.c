@@ -223,7 +223,7 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
     // Add to line in circ buffer
     circ_bbuf_push(&(myCfg->rxBuff), c);
     // if full or CR, copy to all sockets (get list from wskt mgr)
-    if (c==0x0a || c==0x0d || c=='!' || circ_bbuf_free_space(&(myCfg->rxBuff))==0) {
+    if (c==0x0a || c==0x0d || circ_bbuf_free_space(&(myCfg->rxBuff))==0) {
         // Send event to be processed by task? or just do it here?
         // copy out line first to local STATIC buffer (stack space!)
         // MUTEX
@@ -233,12 +233,13 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
         while(!copied && lineLen<UART_LINE_SZ) {
             if (circ_bbuf_pop(&(myCfg->rxBuff), &(_lineBuffer[lineLen]))<0) {
                 // done, its empty
-                _lineBuffer[lineLen] = '\n';
                 copied = true;
             } else {
                 // did we just copy a CR?
-                if (_lineBuffer[lineLen]=='\n') {
+                if (_lineBuffer[lineLen]==0x0d) {
                     // done, EOL
+                    // back up 1 coz don't want the CR
+                    lineLen--;
                     copied = true;                
                 }
             }
@@ -247,28 +248,31 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
         // Make it a null terminated string
         _lineBuffer[lineLen++] = '\0';
         os_mutex_release(&_lbMutex);
-        log_uartbdg("%s for line for listeners", myCfg->dname);
-        // now send it off
-        wskt_t* os[8];      // no more than 8 open sockets on my device please
-        uint8_t ns = wskt_getOpenSockets(myCfg->dname, &(os[0]), 8);
-        // For each socket
-        for(int i=0;i<ns;i++) {
-            // get event out of socket
-            struct os_event* e = os[i]->evt;
-            if (e!=NULL) {
-                if (!e->ev_queued) {
-                    // else copy in line (including the null terminator)
-                    uint8_t* sbuf = (uint8_t*)(e->ev_arg);
-                    memcpy(_lineBuffer, sbuf, lineLen);
-                    // and post event to the listener's task
-                    os_eventq_put(os[i]->eq, e);
+        // We don't give up empty lines
+        if (lineLen>1) {
+            log_uartbdg("%s got line for listeners", myCfg->dname);
+            // now send it off
+            wskt_t* os[8];      // no more than 8 open sockets on my device please
+            uint8_t ns = wskt_getOpenSockets(myCfg->dname, &(os[0]), 8);
+            // For each socket
+            for(int i=0;i<ns;i++) {
+                // get event out of socket
+                struct os_event* e = os[i]->evt;
+                if (e!=NULL) {
+                    if (!e->ev_queued) {
+                        // else copy in line (including the null terminator)
+                        uint8_t* sbuf = (uint8_t*)(e->ev_arg);
+                        memcpy(sbuf, _lineBuffer, lineLen);
+                        // and post event to the listener's task
+                        os_eventq_put(os[i]->eq, e);
+                    } else {
+                        // if already on their q then... discard for this guy???
+                    }
                 } else {
-                    // if already on their q then... discard for this guy???
+                    // ok, this guy doesn't care about RX - thats ok...
                 }
-            } else {
-                // ok, this guy doesn't care about RX - thats ok...
-            }
-        }        
+            }        
+        }
     }
 
     // return -1 if no more rx space
