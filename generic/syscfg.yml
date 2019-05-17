@@ -3,6 +3,9 @@ syscfg.defs:
     SM_TASK_PRIO:
         description: "state machine execution task priority"
         value: 199
+    L96COMM_TASK_PRIO:
+        description: "L96 comm driver task priority"
+        value: 103
     LORAAPP_TASK_PRIO:
         description: "Wyres lorawan wrapper task priority"
         value: 102
@@ -12,12 +15,6 @@ syscfg.defs:
     GPS_TASK_PRIO:
         description: "GPS reception and parsing task priority"
         value: 100
-    UART_TASK_PRIO:
-        description: "UART comm task priority"
-        value: 99
-    L96COMM_TASK_PRIO:
-        description: "L96 comm driver task priority"
-        value: 98
     LEDMGR_TASK_PRIO:
         description: "led manager task priority"
         value: 19
@@ -58,4 +55,3 @@ syscfg.defs:
     SM_MAX_SMS:
         description: "max state machines"
         value: 4
-        

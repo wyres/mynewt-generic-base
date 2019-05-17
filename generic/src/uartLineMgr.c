@@ -17,15 +17,12 @@
 #include "wyres-generic/wskt_driver.h"
 #include "wyres-generic/circbuf.h"
 
+// If got a separate debug uart line, then allowed to do real logs in here, otherwise its the debugger only version that does actually output!
+#define log_uartbdg log_noout_fn
+
 #define MAX_NB_UARTS MYNEWT_VAL(MAX_UARTS)
 #define UART_LINE_SZ (WSKT_BUF_SZ)
 
-//  task should be high pri as does very little but wants to do it in real time
-#define UART_COMM_TASK_PRIO       MYNEWT_VAL(UART_TASK_PRIO)
-#define UART_COMM_TASK_STACK_SZ   OS_STACK_ALIGN(256)
-
-static os_stack_t _uart_task_stack[UART_COMM_TASK_STACK_SZ];
-static struct os_task _uart_task_str;
 
 static struct UARTDeviceCfg {
     char dname[MAX_WKST_DNAME_SZ];
@@ -42,7 +39,6 @@ static int _nbUARTCfgs=0;
 
 // predefine privates
 static bool openuart(struct UARTDeviceCfg* cfg);
-static void uart_comm_task(void* arg);
 static int uart_line_open(wskt_t* skt);
 static int uart_line_ioctl(wskt_t* skt, wskt_ioctl_t* cmd);
 static int uart_line_write(wskt_t* skt, uint8_t* data, uint32_t sz);
@@ -65,9 +61,6 @@ static struct os_mutex _lbMutex;
 // Called from sysinit via reference in pkg.yml
 void uart_line_comm_init(void) {
     // TODO should we use mempools to handle per-device structures?
-        // Create the comm handler task
-    os_task_init(&_uart_task_str, "uart_task", uart_comm_task, NULL, UART_COMM_TASK_PRIO,
-                 OS_WAIT_FOREVER, _uart_task_stack, UART_COMM_TASK_STACK_SZ);
     os_mutex_init(&_lbMutex);
 }
 
@@ -75,7 +68,7 @@ void uart_line_comm_init(void) {
 bool uart_line_comm_create(char* dname, uint32_t baud) {
     // allocate new device cfg element
     if (_nbUARTCfgs>=MAX_NB_UARTS) {
-        //log("too many uart creates");
+        log_uartbdg("too many uart creates");
         return false;
     }
     struct UARTDeviceCfg* myCfg = &_cfgs[_nbUARTCfgs++];
@@ -124,6 +117,7 @@ static bool openuart(struct UARTDeviceCfg* cfg) {
         .uc_flow_ctl = 0,
         .uc_tx_char = uart_tx_cb,
         .uc_rx_char = uart_rx_cb,
+        .uc_tx_done = NULL,
         .uc_cb_arg = cfg,
     };
 
@@ -140,10 +134,10 @@ static int uart_line_open(wskt_t* skt) {
     if (cfg->uartDev==NULL) {
         // setup uart by opening mynewt device
         if (!openuart(cfg)) {
-            log_noout("open uart fail");
+            log_uartbdg("open uart fail");
             return SKT_NODEV;
         }
-        log_noout("open uart ok");
+        log_uartbdg("open uart ok");
     }
     // Not much to do, UART io already running
     return SKT_NOERR;
@@ -156,12 +150,12 @@ static int uart_line_ioctl(wskt_t* skt, wskt_ioctl_t* cmd) {
                 cfg->baud = cmd->param;
                 // If already open, gotta close the device and reopen to set baud
                 if (!openuart(cfg)) {
-                    log_warn("reopen uart fail");
+                    log_uartbdg("reopen uart fail");
                     return SKT_NODEV;
                 }                
-                log_noout("reopen uart ok baud set to %d", cfg->baud);
+                log_uartbdg("reopen uart ok baud set to %d", cfg->baud);
             } else {
-                log_noout("no reopen, baud already set to %d", cfg->baud);
+                log_uartbdg("no reopen, baud already set to %d", cfg->baud);
             }
             break;
         }
@@ -182,13 +176,13 @@ static int uart_line_write(wskt_t* skt, uint8_t* data, uint32_t sz) {
     struct UARTDeviceCfg* cfg=((struct UARTDeviceCfg*)WSKT_DEVICE_CFG(skt));  
 
     if (cfg->uartDev==NULL) {
-        log_noout("can't write as no uart dev..");
+        log_uartbdg("can't write as no uart dev..");
         return SKT_NODEV;
     }
     circ_bbuf_t* buf = &cfg->txBuff;
     // check if space in buffer for ALL the data
     if (sz>circ_bbuf_free_space(buf)) {
-        log_noout("no space in buffer for line of sz %d...", sz);
+        log_uartbdg("no space in buffer for line of sz %d...", sz);
         // if not, don't take any
         return SKT_NOSPACE;
     }
@@ -217,7 +211,7 @@ static int uart_line_close(wskt_t* skt) {
         // clean buffers
         circ_bbuf_init(&cfg->rxBuff, &(cfg->rxBuff_data_space[0]), UART_LINE_SZ+1);
         circ_bbuf_init(&cfg->txBuff, &(cfg->txBuff_data_space[0]), UART_LINE_SZ+1);
-        log_noout("closed last socket on uart %s", cfg->dname);
+        log_uartbdg("closed last socket on uart %s", cfg->dname);
     }
 
     return SKT_NOERR; 
@@ -229,7 +223,7 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
     // Add to line in circ buffer
     circ_bbuf_push(&(myCfg->rxBuff), c);
     // if full or CR, copy to all sockets (get list from wskt mgr)
-    if (c=='\n' || circ_bbuf_free_space(&(myCfg->rxBuff))==0) {
+    if (c==0x0a || c==0x0d || c=='!' || circ_bbuf_free_space(&(myCfg->rxBuff))==0) {
         // Send event to be processed by task? or just do it here?
         // copy out line first to local STATIC buffer (stack space!)
         // MUTEX
@@ -253,7 +247,7 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
         // Make it a null terminated string
         _lineBuffer[lineLen++] = '\0';
         os_mutex_release(&_lbMutex);
-        log_noout("%s for line for listeners", myCfg->dname);
+        log_uartbdg("%s for line for listeners", myCfg->dname);
         // now send it off
         wskt_t* os[8];      // no more than 8 open sockets on my device please
         uint8_t ns = wskt_getOpenSockets(myCfg->dname, &(os[0]), 8);
@@ -262,14 +256,14 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
             // get event out of socket
             struct os_event* e = os[i]->evt;
             if (e!=NULL) {
-                if (e->ev_queued==false) {
-                    // if already on their q then... discard for this guy???
-                } else {
+                if (!e->ev_queued) {
                     // else copy in line (including the null terminator)
                     uint8_t* sbuf = (uint8_t*)(e->ev_arg);
                     memcpy(_lineBuffer, sbuf, lineLen);
                     // and post event to the listener's task
                     os_eventq_put(os[i]->eq, e);
+                } else {
+                    // if already on their q then... discard for this guy???
                 }
             } else {
                 // ok, this guy doesn't care about RX - thats ok...
@@ -308,10 +302,3 @@ static void uart_tx_ready(void* ctx) {
     circ_bbuf_push(&(myCfg->txBuff), c);
 }
 */
-// TODO not sure we need a task in the uart driver in fact
-static void uart_comm_task(void* arg) {
-    while(1) {
-        os_time_delay(OS_TICKS_PER_SEC);
-    }
-
-}
