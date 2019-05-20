@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-typedef enum { LORA_TX_OK, LORA_TX_OK_ACKD, LORA_TX_TIMEOUT, LORA_TX_ERR_RETRY, LORA_TX_ERR_FATAL } LORA_TX_RESULT_t;
+typedef enum { LORA_TX_OK, LORA_TX_OK_ACKD, LORA_TX_TIMEOUT, LORA_TX_ERR_RETRY, LORA_TX_ERR_NOTJOIN, LORA_TX_ERR_FATAL } LORA_TX_RESULT_t;
 typedef void (*LORA_RES_CB_FN_t)(LORA_TX_RESULT_t e);
 typedef void (*LORA_RX_CB_FN_t)(uint8_t port, void* data, uint8_t sz);
 
@@ -21,6 +21,8 @@ void lora_app_setDevEUI(uint8_t* d);
 void lora_app_setAppEUI(uint8_t* d);
 void lora_app_setAppKey(uint8_t* d);
 
+bool lora_app_join();
+bool lora_app_isJoined();
 // tx a buffer. calls the callback fn (in init()) with result : 
 LORA_TX_RESULT_t lora_app_tx(uint8_t* data, uint8_t sz, uint32_t timeoutMs);
 

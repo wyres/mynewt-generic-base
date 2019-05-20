@@ -10,6 +10,8 @@
 
 #include "wyres-generic/configmgr.h"
 
+// See eeprom_board.c in src/board/iM880C for basic access methods eg EEPROM_SaveConfiguration() (but do it much better)
+
 // Add a new element definition key. If the key is already known AND has the same key, this is a noop. 
 // If the key exists but has a different length, false is returned.
 // If the key is unknown, it is added to the dictionary and the value is set to that of initdata.

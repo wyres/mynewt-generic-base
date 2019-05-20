@@ -359,7 +359,14 @@ static void loraapp_task(void* data) {
                 (*_txcbfn)(LORA_TX_OK);
             }
             if (txev & LORAWAN_EVENT_ERROR) {
-                (*_txcbfn)(LORA_TX_ERR_RETRY);
+                // Check if we are joined
+                if (lora_app_isJoined()) {
+                    (*_txcbfn)(LORA_TX_ERR_RETRY);
+                } else {
+                    // Not joined this is why an error
+                    (*_txcbfn)(LORA_TX_ERR_NOTJOIN);
+
+                }
             }
             if (txev==0) {
                 // timeout
@@ -384,4 +391,23 @@ static void loraapp_task(void* data) {
             os_time_delay(OS_TICKS_PER_SEC*60);
         }
     }
+}
+
+// TODO force join independantly of tx?
+bool lora_app_join() {
+    return false;
+}
+
+// return join status
+bool lora_app_isJoined() {
+    if(_sock_tx>0) {
+        lorawan_attribute_t mib;
+        mib.Type = LORAWAN_ATTR_NETWORK_JOINED;
+        if (lorawan_getsockopt(_sock_tx, &mib) == LORAWAN_STATUS_OK) {
+            return mib.Param.IsNetworkJoined;
+        } else {
+            log_warn("failed to get join status");
+        }
+    }
+    return false;       // as far as we know
 }

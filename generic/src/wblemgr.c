@@ -44,6 +44,7 @@ void wble_mgr_init(const char* dname) {
 // Get current list of SSIDs. Returns 0 for sucess, -1 for failure
 int wble_getBeaconList(uint8_t* sz, ibeacon_data_t** list) {
     // TODO 
+    // see code in ble_scanner.c in src/sensors in old firmare
     return -1;
 }
 

@@ -24,8 +24,9 @@ typedef int8_t SM_STATE_ID_t;
 
 // Each state's function must return the id of the next state to transition, or the value SM_STATE_CURRENT to stay in the same one
 // Note that the event 'e' is an int as the event list (SM_EVENT_TYEP_t) can be extended for each SM
+// ctxarg is the value as supplied to the sm_init() 
 // NOTE : for ENTER and EXIT events, no state change is allowed (returned value is ignored).
-typedef SM_STATE_ID_t (*SM_STATE_FN_t)(int e, void* data);
+typedef SM_STATE_ID_t (*SM_STATE_FN_t)(void* ctxarg, int e, void* data);
 typedef struct {
     SM_STATE_ID_t id;         // this is the enum
     const char* name;           // for debug logs
@@ -43,9 +44,9 @@ SM_STATE_t _mySM[MS_LAST] = {
     {.id=MS_GETTING_BLE, .name="GettingBLE", .fn=State_GettingBLE},    
     {.id=MS_SENDING_DM, .name="SendingDM", .fn=State_SendingDM},    
 };
- * Call sm_init() with with this table, its size, and the initial state.
+ * Call sm_init() with with this table, its size, and the initial state, and the ctx arg passed to state functions (can be NULL)
  */
-SM_ID_t sm_init(const char* name, SM_STATE_t* stateTable, uint8_t sz, SM_STATE_ID_t initialState);
+SM_ID_t sm_init(const char* name, SM_STATE_t* stateTable, uint8_t sz, SM_STATE_ID_t initialState, void* ctxarg);
 /*
  * To start your state machine do 
 sm_start(id):

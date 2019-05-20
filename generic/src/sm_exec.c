@@ -23,6 +23,7 @@ typedef struct sm_event {
 typedef struct {
     SM_STATE_t* sm_table;
     uint8_t sz;
+    void* ctxarg;
     SM_STATE_t* currentState;
     struct os_callout timer;
 } SM_t;
@@ -66,7 +67,7 @@ void init_sm_exec(void) {
 }
 
 // PUBLIC : Create an SM and return its reference
-SM_ID_t sm_init(const char* name, SM_STATE_t* states, uint8_t sz, SM_STATE_ID_t initialState) {
+SM_ID_t sm_init(const char* name, SM_STATE_t* states, uint8_t sz, SM_STATE_ID_t initialState, void* ctxarg) {
     // Sanity check the table
     assert(sz>0 && sz<255);
     // alloc a space
@@ -74,6 +75,7 @@ SM_ID_t sm_init(const char* name, SM_STATE_t* states, uint8_t sz, SM_STATE_ID_t 
     assert(_smIdx<SM_MAX_SMS);
     sm->sm_table = states;
     sm->sz = sz;
+    sm->ctxarg = ctxarg;
     // Set current state to initial one
     sm->currentState = findStateFromId(initialState, sm->sm_table, sm->sz);
     os_callout_init(&(sm->timer), &_sm_EQ, sm_timer_cb, sm);
@@ -119,7 +121,7 @@ static void sm_nextevent_cb(struct os_event* e) {
         // call SM with event
         SM_EVENT_t* evt = &_sm_event_list[circListNext(&_sm_event_list_head, SM_MAX_EVENTS)];
         SM_t* sm = (SM_t*)(evt->sm_id);
-        SM_STATE_ID_t nextState = (sm->currentState->fn)(evt->e, evt->data);
+        SM_STATE_ID_t nextState = (sm->currentState->fn)(sm->ctxarg, evt->e, evt->data);
         // Check if change of state
         if (nextState!=SM_STATE_CURRENT) {
             // ensure timer is stopped before entering next state
@@ -131,11 +133,11 @@ static void sm_nextevent_cb(struct os_event* e) {
                 assert(0);      // stop right here boys
             }
             // exit previous - you are NOT allowed to change the destination state 
-            (sm->currentState->fn)(SM_EXIT, NULL);
+            (sm->currentState->fn)(sm->ctxarg, SM_EXIT, NULL);
             // change to next one
             sm->currentState = next;
             // enter next - allowed to change to a new one? no - in this case you can send yourself your own event...
-            (sm->currentState->fn)(SM_ENTER, NULL);
+            (sm->currentState->fn)(sm->ctxarg, SM_ENTER, NULL);
         }
     }
 }
@@ -148,6 +150,7 @@ static void sm_mgr_task(void* arg) {
 }
 
 static SM_STATE_t* findStateFromId(SM_STATE_ID_t id, SM_STATE_t* table, uint8_t sz) {
+    // start search at the 'idth' element iff id<sz, in case table elements are in the enum order... optimisation... TODO
     for(int i=0;i<sz;i++) {
         if (table[i].id==id) {
             return &table[i];

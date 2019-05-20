@@ -19,22 +19,31 @@
 static os_stack_t _gps_task_stack[GPS_TASK_STACK_SZ];
 static struct os_task gps_mgr_task_str;
 
-static struct os_event _myGPSEvent;
-static struct os_eventq _gpsMgrEQ;
-static struct os_mutex _dataMutex;
+static struct {
+    struct os_event myGPSEvent;
+    struct os_eventq gpsMgrEQ;
+    struct os_mutex dataMutex;
 
-static const char* _uartDevice;
-static int8_t _pwrPin;
-static int8_t _uartSelect;
-static wskt_t* _cnx;
-static uint8_t _rxbuf[WSKT_BUF_SZ+1];
-static gps_data_t _gpsData ={
-    .prec = -1,
-    .lat = 0,
-    .lon = 0,
-    .alt = 0,
+    const char* uartDevice;
+    int8_t pwrPin;
+    int8_t uartSelect;
+    wskt_t* cnx;
+    uint8_t rxbuf[WSKT_BUF_SZ+1];
+    gps_data_t gpsData;
+    uint32_t lastFixTime;
+    GPS_CB_FN_t cbfn;
+} _ctx = {
+    .lastFixTime = 0,
+    .gpsData = {
+        .prec = -1,
+        .lat = 0,
+        .lon = 0,
+        .alt = 0,
+        .rxAt = 0,
+    },
+    .cbfn=NULL,
 };
-static GPS_CB_FN_t _cbfn=NULL;
+
 
 // predeclare privates
 static void gps_mgr_task(void* arg);
@@ -43,23 +52,22 @@ static bool parseNEMA(const char* line, gps_data_t* nd);
 
 // Called from appinit 
 void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect) {
-    memset(&_gpsData, 0, sizeof(gps_data_t));
-    _uartDevice = dname;
-    _uartSelect=uartSelect;
-    _pwrPin = pwrPin;
-    if (_pwrPin>=0) {
+    _ctx.uartDevice = dname;
+    _ctx.uartSelect=uartSelect;
+    _ctx.pwrPin = pwrPin;
+    if (_ctx.pwrPin>=0) {
         // Note 1 is OFF so start with it off
-        GPIO_define_out("gpspower", _pwrPin, 1, LP_DEEPSLEEP);
+        GPIO_define_out("gpspower", _ctx.pwrPin, 1, LP_DEEPSLEEP);
     }
     // mutex for data access
-    os_mutex_init(&_dataMutex);
+    os_mutex_init(&_ctx.dataMutex);
 
     // Create eventQ
-    os_eventq_init(&_gpsMgrEQ);
+    os_eventq_init(&_ctx.gpsMgrEQ);
     // create event with arg pointing to our line buffer
     // TODO how to tell driver limit of size of buffer???
-    _myGPSEvent.ev_cb = gps_mgr_rxcb;
-    _myGPSEvent.ev_arg = _rxbuf;
+    _ctx.myGPSEvent.ev_cb = gps_mgr_rxcb;
+    _ctx.myGPSEvent.ev_arg = _ctx.rxbuf;
     // Create task 
     os_task_init(&gps_mgr_task_str, "gps_task", gps_mgr_task, NULL, GPS_TASK_PRIO,
                OS_WAIT_FOREVER, _gps_task_stack, GPS_TASK_STACK_SZ);
@@ -68,60 +76,69 @@ void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect) {
 bool getGPSData(gps_data_t* d) {
     bool ret = false;
         // mutex lock
-    os_mutex_pend(&_dataMutex, OS_TIMEOUT_NEVER);
-    if (_gpsData.rxAt>0) {
+    os_mutex_pend(&_ctx.dataMutex, OS_TIMEOUT_NEVER);
+    if (_ctx.gpsData.rxAt>0) {
         ret = true;
-        d->lat = _gpsData.lat;
-        d->lon = _gpsData.lon;
-        d->alt = _gpsData.alt;
-        d->prec = _gpsData.prec;
-        d->nSats = _gpsData.nSats;
-        d->rxAt = _gpsData.rxAt;
+        d->lat = _ctx.gpsData.lat;
+        d->lon = _ctx.gpsData.lon;
+        d->alt = _ctx.gpsData.alt;
+        d->prec = _ctx.gpsData.prec;
+        d->nSats = _ctx.gpsData.nSats;
+        d->rxAt = _ctx.gpsData.rxAt;
     }
     // ok
-    os_mutex_release(&_dataMutex);
+    os_mutex_release(&_ctx.dataMutex);
 
     return ret;
 }
+// Get age of the last fix we got, or -1 if never had a fix
+int32_t gps_lastGPSFixAgeMins() {
+    if (_ctx.gpsData.rxAt>0) {
+        return (TMMgr_getRelTime() - _ctx.gpsData.rxAt)/(60*1000);
+    } else {
+        return -1;
+    }
+}
+
 void gps_start(GPS_CB_FN_t cbfn) {
-    _cbfn = cbfn;
+    _ctx.cbfn = cbfn;
     // Power up using power pin
-    if (_pwrPin>=0) {
-        log_debug("gps power ON using pin %d", _pwrPin);
-        GPIO_write(_pwrPin, 0);     // yup pull down for ON
+    if (_ctx.pwrPin>=0) {
+        log_debug("gps power ON using pin %d", _ctx.pwrPin);
+        GPIO_write(_ctx.pwrPin, 0);     // yup pull down for ON
     } else {
         log_debug("gps poweralways on?");
     }
     // Select it as UART device (if required)
-    if (_uartSelect>=0) {
-        uart_select(_uartSelect);
+    if (_ctx.uartSelect>=0) {
+        uart_select(_ctx.uartSelect);
     }
     // initialise comms to the gps via the uart like comms device defined in syscfg
-    _cnx = wskt_open(_uartDevice, &_myGPSEvent, &_gpsMgrEQ);
-    assert(_cnx!=NULL);
+    _ctx.cnx = wskt_open(_ctx.uartDevice, &_ctx.myGPSEvent, &_ctx.gpsMgrEQ);
+    assert(_ctx.cnx!=NULL);
     // Set baud rate
     wskt_ioctl_t cmd = {
         .cmd = IOCTL_SET_BAUD,
         .param = MYNEWT_VAL(GPS_UART_BAUDRATE),
     };
-    wskt_ioctl(_cnx, &cmd);
+    wskt_ioctl(_ctx.cnx, &cmd);
     // Don't need to write to anything
 }
 void gps_stop() {
-    if (_cnx!=NULL) {
-        wskt_close(&_cnx);
+    if (_ctx.cnx!=NULL) {
+        wskt_close(&_ctx.cnx);
     }
-    if (_pwrPin>=0) {
-        log_debug("gps power OFF using pin %d", _pwrPin);
-        GPIO_write(_pwrPin, 1);
+    if (_ctx.pwrPin>=0) {
+        log_debug("gps power OFF using pin %d", _ctx.pwrPin);
+        GPIO_write(_ctx.pwrPin, 1);
     }
-    _cbfn = NULL;
+    _ctx.cbfn = NULL;
 }
 
 // task just runs the callbacks
 static void gps_mgr_task(void* arg) {
     while(1) {
-        os_eventq_run(&_gpsMgrEQ);
+        os_eventq_run(&_ctx.gpsMgrEQ);
     }
 }
 
@@ -139,8 +156,8 @@ static void gps_mgr_rxcb(struct os_event* ev) {
     // if unparseable then tell cb
     if (!parseNEMA(line, &newdata)) {
 //        log_debug("bad gps line");
-        if (_cbfn!=NULL) {
-            (*_cbfn)(GPS_FAIL);
+        if (_ctx.cbfn!=NULL) {
+            (*_ctx.cbfn)(GPS_FAIL);
         }
         return;
     }
@@ -148,32 +165,23 @@ static void gps_mgr_rxcb(struct os_event* ev) {
     // update current position if got one
     if (newdata.prec>0) {
         log_debug("new gps data ok %d, %d, %d", newdata.lat, newdata.lon, newdata.alt);
-        bool newlock = false;
         // mutex lock
-        os_mutex_pend(&_dataMutex, OS_TIMEOUT_NEVER);
-        // is it a new fix?
-        if (_gpsData.prec<=0) {
-            newlock = true;
-        }
-        _gpsData.lat = newdata.lat;
-        _gpsData.lon = newdata.lon;
-        _gpsData.alt = newdata.alt;
-        _gpsData.prec = newdata.prec;
-        _gpsData.nSats = newdata.nSats;
-        _gpsData.rxAt = TMMgr_getRelTime();
+        os_mutex_pend(&_ctx.dataMutex, OS_TIMEOUT_NEVER);
+        _ctx.gpsData.lat = newdata.lat;
+        _ctx.gpsData.lon = newdata.lon;
+        _ctx.gpsData.alt = newdata.alt;
+        _ctx.gpsData.prec = newdata.prec;
+        _ctx.gpsData.nSats = newdata.nSats;
+        _ctx.gpsData.rxAt = TMMgr_getRelTime();
         // ok
-        os_mutex_release(&_dataMutex);
+        os_mutex_release(&_ctx.dataMutex);
 
         // tell cb
-        if (_cbfn!=NULL) {
-            if (newlock) {
-                (*_cbfn)(GPS_LOCK);
-            } else {
-                (*_cbfn)(GPS_NEWFIX);
-            }
+        if (_ctx.cbfn!=NULL) {
+            (*_ctx.cbfn)(GPS_NEWFIX);
         }
     } else {
-        log_debug("ok gps not fix");
+        log_debug("gps !fix");
     }
     // and continue
 }

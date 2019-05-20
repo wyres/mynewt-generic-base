@@ -21,6 +21,9 @@ typedef void (*GPS_CB_FN_t)(GPS_EVENT_TYPE_t e);
 void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect);
 
 bool getGPSData(gps_data_t* d);
+// Get age of the last fix we got, or -1 if never had a fix
+int32_t gps_lastGPSFixAgeMins();
+
 void gps_start(GPS_CB_FN_t cb);
 void gps_stop();
 
