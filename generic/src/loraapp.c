@@ -49,7 +49,7 @@ static struct loraapp_config {
     .txPower=14,
     .txTimeoutMs=10000,
 //    .deveui = {0x38,0xE8,0xEB,0xE0, 0x00, 0x00, 0x0d, 0x78},
-    .deveui = {0x38,0xb8,0xeb,0xe0, 0x00, 0x00, 0x0d, 0x78},
+    .deveui = {0x38,0xb8,0xeb,0xe0, 0x00, 0x00, 0x0d, 0x73},
     .appeui = {0x01,0x23,0x45,0x67, 0x89, 0xab, 0xcd, 0xef},
 //    .appeui = {0x38,0xE8,0xEB,0xEA, 0xBC, 0xDE, 0xF0, 0x42},
     .appkey = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF},
@@ -199,9 +199,21 @@ void lora_app_setTxPower(int8_t p) {
         }
     }
 }
+void lora_app_setDR(int8_t d) {
+    _loraCfg.loraDR = d;
+    CFMgr_setElement(CFG_UTIL_KEY_DR, &_loraCfg.loraDR, sizeof(int8_t));
+    if (_sock_tx > 0 ) {
+        lorawan_attribute_t mib;
+        mib.Type = LORAWAN_ATTR_CHANNELS_DEFAULT_DATARATE;
+        mib.Param.ChannelsDefaultDatarate = _loraCfg.loraDR;
+        if (lorawan_setsockopt(_sock_tx, &mib) != LORAWAN_STATUS_OK) {
+            log_warn("failed to set data rate");
+        }
+    }
+}
 
 static bool configSocket(lorawan_sock_t skt) {
-        /* 2nd action: configure the socket */
+    bool ret = true;
     lorawan_status_t status;
     lorawan_attribute_t mib;
     mib.Type = LORAWAN_ATTR_ADR;
@@ -209,6 +221,7 @@ static bool configSocket(lorawan_sock_t skt) {
     status = lorawan_setsockopt(skt, &mib);
     if (status != LORAWAN_STATUS_OK) {
         log_warn("failed to set ADR");
+        ret = false;
     }
     mib.Type = LORAWAN_ATTR_MCPS_TYPE;
     if (_loraCfg.useAck) {
@@ -219,21 +232,25 @@ static bool configSocket(lorawan_sock_t skt) {
     status = lorawan_setsockopt(skt, &mib);
     if (status != LORAWAN_STATUS_OK) {
         log_warn("failed to set ACK");
+        ret = false;
     }
-    mib.Type = LORAWAN_ATTR_CHANNELS_DEFAULT_DATARATE;
+    mib.Type = LORAWAN_ATTR_CHANNELS_DATARATE;
     mib.Param.ChannelsDefaultDatarate = _loraCfg.loraDR;
     status = lorawan_setsockopt(skt, &mib);
     if (status != LORAWAN_STATUS_OK) {
         log_warn("failed to set data rate");
+        ret = false;
     }
-    mib.Type = LORAWAN_ATTR_CHANNELS_DEFAULT_TX_POWER;
+    mib.Type = LORAWAN_ATTR_CHANNELS_TX_POWER;
     mib.Param.ChannelsDefaultTxPower = ((14-_loraCfg.txPower)/2);        // lorawan stack power does 0-7, no one knows why
     status = lorawan_setsockopt(skt, &mib);
     if (status != LORAWAN_STATUS_OK) {
-        log_warn("failed to set data rate");
+        log_warn("failed to set tx power");
+        ret = false;
     }
-    return true;
+    return ret;
 }
+
 // initialise lorawan stack with our config
 void lora_app_init( LORA_RES_CB_FN_t txcb, LORA_RX_CB_FN_t rxcb) {
 /*
@@ -316,13 +333,15 @@ LORA_TX_RESULT_t lora_app_tx(uint8_t* data, uint8_t sz, uint32_t timeoutMs) {
     }
     _loraCfg.txTimeoutMs = timeoutMs;
     memcpy(_txBuffer, data, sz);
-/* 3rd action: put the data into the queue, the message will be sent
-         * when the LoRaWAN stack is ready. */
+    /* put the data into the queue, the message will be sent
+     * when the LoRaWAN stack is ready. 
+     **/
     int ret = lorawan_send(_sock_tx, _loraCfg.txPort, _txBuffer, sz);
     switch(ret) {
         case LORAWAN_STATUS_OK: {
-            log_debug("LoRaWAN API tx queued ok [with devAddr:%08lx]\r\n",
-                lorawan_get_devAddr_unicast() );
+            log_debug("LoRaWAN API tx queued %d bytes ok on port:%d dr:%d txpower:%d ackReq:%d]\r\n",
+                sz, _loraCfg.txPort, 
+                _loraCfg.loraDR, _loraCfg.txPower, _loraCfg.useAck );
             // release the task to wait for result 
             os_sem_release(&_lora_tx_sem);
             return LORA_TX_OK;

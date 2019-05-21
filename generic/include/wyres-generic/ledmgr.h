@@ -24,6 +24,7 @@ bool ledStart(int8_t gpio, const char* pattern, uint32_t dur);
 void ledCancel(int8_t gpio);
 
 // Some common flash patterns
+#define FLASH_MIN  ("10000000000000000000")       
 #define FLASH_05HZ  ("11111111110000000000")       
 #define FLASH_1HZ  ("11111000001111100000")       
 #define FLASH_2HZ ("11000110001100011000")

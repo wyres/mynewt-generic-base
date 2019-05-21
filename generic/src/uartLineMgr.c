@@ -34,6 +34,7 @@ static struct UARTDeviceCfg {
     circ_bbuf_t txBuff;
     uint8_t rxIdx;
     uint8_t txIdx;
+    bool filterASCII;
 } _cfgs[MAX_NB_UARTS];          // TODO use mempool
 static int _nbUARTCfgs=0;
 
@@ -78,6 +79,7 @@ bool uart_line_comm_create(char* dname, uint32_t baud) {
     circ_bbuf_init(&myCfg->rxBuff, &(myCfg->rxBuff_data_space[0]), UART_LINE_SZ+1);
     circ_bbuf_init(&myCfg->txBuff, &(myCfg->txBuff_data_space[0]), UART_LINE_SZ+1);
     myCfg->uartDev = NULL;
+    myCfg->filterASCII = true;      // by default
 
     // and register ourselves as a 'uart like' comms provider so procesing routines can read the data
     wskt_registerDevice(dname, &_myDevice, myCfg);
@@ -166,6 +168,10 @@ static int uart_line_ioctl(wskt_t* skt, wskt_ioctl_t* cmd) {
             }
             break;
         }
+        // Allow to only take ASCII chars (32-127) with LF (0x0a) as line end
+        case IOCTL_FILTERASCII: {
+            cfg->filterASCII = cmd->param;
+        }
         default: {
             return SKT_EINVAL; 
         }
@@ -216,15 +222,19 @@ static int uart_line_close(wskt_t* skt) {
 
     return SKT_NOERR; 
 }
-
+#define LF (0x0A)
+#define CR (0x0D)
+#define EOL LF
 // IRQ for rx byte
 static int uart_rx_cb(void* ctx, uint8_t c) {
     struct UARTDeviceCfg* myCfg = (struct UARTDeviceCfg*)ctx;
-    // Add to line in circ buffer
+    // Add to line in circ buffer iff not filtering, or is EOL or TAB (used as a seperator)
+    if (myCfg->filterASCII && (c<0x20 || c>0x7E) && c!=EOL && c!=0x09) {
+        return 0;
+    }
     circ_bbuf_push(&(myCfg->rxBuff), c);
-    // if full or CR, copy to all sockets (get list from wskt mgr)
-    if (c==0x0a || c==0x0d || circ_bbuf_free_space(&(myCfg->rxBuff))==0) {
-        // Send event to be processed by task? or just do it here?
+    // if full or EOL, copy to all sockets (get list from wskt mgr)
+    if (c==EOL || circ_bbuf_free_space(&(myCfg->rxBuff))==0) {
         // copy out line first to local STATIC buffer (stack space!)
         // MUTEX
         os_mutex_pend(&_lbMutex, OS_TIMEOUT_NEVER);
@@ -235,10 +245,10 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
                 // done, its empty
                 copied = true;
             } else {
-                // did we just copy a CR?
-                if (_lineBuffer[lineLen]==0x0d) {
+                // did we just copy a EOL?
+                if (_lineBuffer[lineLen]==EOL) {
                     // done, EOL
-                    // back up 1 coz don't want the CR
+                    // back up 1 coz don't want the EOL
                     lineLen--;
                     copied = true;                
                 }
@@ -246,11 +256,11 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
             lineLen++;
         }
         // Make it a null terminated string
-        _lineBuffer[lineLen++] = '\0';
+        _lineBuffer[lineLen++] = 0;
         os_mutex_release(&_lbMutex);
         // We don't give up empty lines
         if (lineLen>1) {
-            log_uartbdg("%s got line for listeners", myCfg->dname);
+//            log_uartbdg("%s got line", myCfg->dname);
             // now send it off
             wskt_t* os[8];      // no more than 8 open sockets on my device please
             uint8_t ns = wskt_getOpenSockets(myCfg->dname, &(os[0]), 8);

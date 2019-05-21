@@ -32,6 +32,7 @@ static struct {
     gps_data_t gpsData;
     uint32_t lastFixTime;
     GPS_CB_FN_t cbfn;
+    bool commOk;
 } _ctx = {
     .lastFixTime = 0,
     .gpsData = {
@@ -49,6 +50,8 @@ static struct {
 static void gps_mgr_task(void* arg);
 static void gps_mgr_rxcb(struct os_event* ev);
 static bool parseNEMA(const char* line, gps_data_t* nd);
+
+// TODO could refactor as a state machine...
 
 // Called from appinit 
 void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect) {
@@ -100,8 +103,10 @@ int32_t gps_lastGPSFixAgeMins() {
     }
 }
 
+// TODO Should be a SM?
 void gps_start(GPS_CB_FN_t cbfn) {
     _ctx.cbfn = cbfn;
+    _ctx.commOk = false;        // just starting...
     // Power up using power pin
     if (_ctx.pwrPin>=0) {
         log_debug("gps power ON using pin %d", _ctx.pwrPin);
@@ -146,21 +151,26 @@ static void gps_mgr_task(void* arg) {
 static void gps_mgr_rxcb(struct os_event* ev) {
     // ev->arg is our line buffer
     const char* line = (char*)(ev->ev_arg);
-//    log_debug("received input [%s]", line);
+    assert(line!=NULL);
     if (strnlen(line, 10)<10) {
         // too short line ignore
         return;
     }
+    log_debug("gps[%d][%c%c%c%c%c%c]", strnlen(line,255), line[0],line[1],line[2],line[3],line[4],line[5]);
     // parse it
     gps_data_t newdata;
     // if unparseable then tell cb
     if (!parseNEMA(line, &newdata)) {
-//        log_debug("bad gps line");
-        if (_ctx.cbfn!=NULL) {
-            (*_ctx.cbfn)(GPS_FAIL);
+        log_debug("bad gps line [%s]", line);
+        if (_ctx.commOk) {
+            _ctx.commOk = false;
+            if (_ctx.cbfn!=NULL) {
+                (*_ctx.cbfn)(GPS_COMM_FAIL);
+            }
         }
         return;
     }
+//    log_debug("gps [%s]", line);
 
     // update current position if got one
     if (newdata.prec>0) {
@@ -181,7 +191,12 @@ static void gps_mgr_rxcb(struct os_event* ev) {
             (*_ctx.cbfn)(GPS_NEWFIX);
         }
     } else {
-        log_debug("gps !fix");
+        if (!_ctx.commOk) {
+            _ctx.commOk = true;
+            if (_ctx.cbfn!=NULL) {
+                (*_ctx.cbfn)(GPS_COMM_OK);
+            }
+        }
     }
     // and continue
 }

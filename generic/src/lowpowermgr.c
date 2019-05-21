@@ -23,18 +23,21 @@ static struct lp_ctx {
     .curMode=LP_RUN,
 };
 
+// Register to be told when we change mode
 void LPMgr_register(LP_CBFN_t cb) {
     // TODO add to list
     assert(_ctx.deviceCnt < MAX_LPCBFNS);
     _ctx.devices[_ctx.deviceCnt++]=cb;
 }
-// THe level of sleeping when someone asks to enter low power mode
+// THe level of sleeping when someone (OS) asks to enter 'low power mode'
 void LPMgr_setLPMode(LP_MODE m) {
     _ctx.sleepMode = m;
+    // Set up MCU ready for a WKI instruction (for OS that doesn't call LPMgr_sleep())
 }
 // goto sleep until either an IRQ/timer (if enabled in the mode used) or (max) the wakeupTimeoutMs time has passed
 void LPMgr_sleep(uint32_t wakeupTimeoutMs) {
     // todo
+    // Should call fns in bsp really as this is board/mcu dependant
     // see    LPM_Enter() called from main.c in old code, code in boards/SK-iM880C/lowpower_board.c
 }
 

@@ -15,7 +15,7 @@ typedef struct gps_data {
     uint8_t nSats;      // number of satellites used for this fix
     uint32_t rxAt;      // timestamp in ms since boot of when this position was updated
 } gps_data_t;
-typedef enum { GPS_LOCK, GPS_UNLOCK, GPS_FAIL, GPS_NEWFIX } GPS_EVENT_TYPE_t;
+typedef enum { GPS_COMM_OK, GPS_COMM_FAIL, GPS_SATOK, GPS_SATLOSS, GPS_NEWFIX } GPS_EVENT_TYPE_t;
 typedef void (*GPS_CB_FN_t)(GPS_EVENT_TYPE_t e);
 
 void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect);

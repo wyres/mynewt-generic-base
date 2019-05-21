@@ -7,7 +7,13 @@
 extern "C" {
 #endif
 
-// Low power sleep modes, in order of increasing sleepness (ie lower power coz more stuff is off)
+/** Low power sleep modes, in order of increasing sleepness (ie lower power coz more stuff is off)
+ * RUN : normal operation
+ * DOZE : only CPU core is stopped (STM32L151CC 'Sleep mode')
+ * SLEEP : CPU core + as many periphs off as possible (using info provided by the user of the periph) ('Low-power sleep mode')
+ * DEEP_SLEEP : only RAM /RTC retained - all periphs are off. ('Stop mode with RTC')
+ * OFF : all off, restart via RTC or reset ('Standby mode with RTC')
+ */ 
 typedef enum  { LP_RUN, LP_DOZE, LP_SLEEP, LP_DEEPSLEEP, LP_OFF } LP_MODE;
 typedef void (*LP_CBFN_t)(LP_MODE prevmode, LP_MODE newmode);
 // Register to be told when entering or leaving sleep

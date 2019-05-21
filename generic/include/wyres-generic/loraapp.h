@@ -16,6 +16,7 @@ void lora_app_setAck(bool useAck);
 void lora_app_setAdr(bool useAdr);
 void lora_app_setTxPort(uint8_t p);
 void lora_app_setRxPort(uint8_t p);
+void lora_app_setDR(int8_t d);
 void lora_app_setTxPower(int8_t p);
 void lora_app_setDevEUI(uint8_t* d);
 void lora_app_setAppEUI(uint8_t* d);

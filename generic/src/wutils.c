@@ -65,6 +65,8 @@ void __assert_func(const char *file, int line, const char *func, const char *e) 
 #define MAX_LOGSZ 256
 // Must be static buffer NOT ON STACK
 static char _buf[MAX_LOGSZ];
+static char _noutbuf[MAX_LOGSZ];        // for nout log
+
 // By default use mynewt console, not some random uart
 static bool _useConsole = true;
 static int _uartNb = -1;
@@ -169,18 +171,12 @@ void log_error_fn(const char* ls, ...) {
 void log_noout_fn(const char* ls, ...) {
     va_list vl;
     va_start(vl, ls);
-    vsprintf(_buf, ls, vl);
-    // watch _buf to see the log
+    vsprintf(_noutbuf, ls, vl);
+    // watch _noutbuf to see the log
     int l = strlen(_buf);
-    _buf[l++] = '\n';
-    _buf[l++] = '\r';
-    _buf[l++] = '\0';
-    if (_uartNb>=0) {
-        // blocking write to uart for debug
-        for(int i=0;i<l;i++) {
-            hal_uart_blocking_tx(_uartNb, _buf[i]);
-        }
-    }
+    _noutbuf[l++] = '\n';
+    _noutbuf[l++] = '\r';
+    _noutbuf[l++] = '\0';
     va_end(vl);
 }
 

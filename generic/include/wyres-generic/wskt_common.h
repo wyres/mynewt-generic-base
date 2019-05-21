@@ -25,7 +25,7 @@ typedef struct wskt {
     struct os_eventq* eq;
 } wskt_t;
 
-typedef enum { IOCTL_PWRON, IOCTL_PWROFF, IOCTL_RESET, IOCTL_SET_BAUD} wskt_ioctl_cmd;
+typedef enum { IOCTL_PWRON, IOCTL_PWROFF, IOCTL_RESET, IOCTL_SET_BAUD, IOCTL_FILTERASCII } wskt_ioctl_cmd;
 typedef struct wskt_ioctl {
     wskt_ioctl_cmd cmd;
     uint32_t param;
