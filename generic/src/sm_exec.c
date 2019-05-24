@@ -103,10 +103,12 @@ void sm_timer_start(SM_ID_t id, uint32_t tms) {
     SM_t* sm = (SM_t*)id;
     os_time_t ticks;
     os_time_ms_to_ticks(tms, &ticks);
+    // TODO STOP OLD TIMER?
     os_callout_reset(&(sm->timer), ticks);
 }
 void sm_timer_stop(SM_ID_t id) {
     SM_t* sm = (SM_t*)id;
+    // TODO REMOVE ANY TIMEOUT EVENTS FOR THIS SM FROM EVENT Q (in case it popped but is now cancelled)
     os_callout_stop(&(sm->timer));
 }
 

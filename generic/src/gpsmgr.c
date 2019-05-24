@@ -156,7 +156,6 @@ static void gps_mgr_rxcb(struct os_event* ev) {
         // too short line ignore
         return;
     }
-    log_debug("gps[%d][%c%c%c%c%c%c]", strnlen(line,255), line[0],line[1],line[2],line[3],line[4],line[5]);
     // parse it
     gps_data_t newdata;
     // if unparseable then tell cb
@@ -174,7 +173,7 @@ static void gps_mgr_rxcb(struct os_event* ev) {
 
     // update current position if got one
     if (newdata.prec>0) {
-        log_debug("new gps data ok %d, %d, %d", newdata.lat, newdata.lon, newdata.alt);
+        log_debug("new gps data ok (%d, %d, %d) (%d) (%d)", newdata.lat, newdata.lon, newdata.alt, newdata.prec, newdata.nSats);
         // mutex lock
         os_mutex_pend(&_ctx.dataMutex, OS_TIMEOUT_NEVER);
         _ctx.gpsData.lat = newdata.lat;
@@ -212,13 +211,23 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
         case MINMEA_SENTENCE_GGA: {
             struct minmea_sentence_gga ggadata;
             if (minmea_parse_gga(&ggadata, line)) {
-                nd->lat = ggadata.latitude.value;
-                nd->lon = ggadata.longitude.value;
-                nd->alt = ggadata.altitude.value;
-                nd->nSats = ggadata.satellites_tracked;
-                nd->prec = ggadata.fix_quality;         // TODO MAP?
+                if (ggadata.fix_quality>0) {
+                    nd->lat = ggadata.latitude.value;
+                    nd->lon = ggadata.longitude.value;
+                    nd->alt = ggadata.altitude.value;
+                    nd->nSats = ggadata.satellites_tracked;
+                    nd->prec = ggadata.hdop.value*2; // precision diameter for 95% is 50% *2? 
+                    if (nd->prec < 1) {
+                        nd->prec = 5;
+                    }
+                    log_debug("gga ok + fix");
+                } else {
+                    log_debug("gga ok no fix");
+                    nd->prec = 0;
+                }
             } else {
                 // hmmm not so good
+                log_debug("gga bad");
                 nd->prec = 0;
             }
             return true;
@@ -226,11 +235,25 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
         case MINMEA_INVALID: {
             return false;
         }
-        case MINMEA_SENTENCE_RMC: 
-            // could be useful but GGA has more data - fall thru
+        case MINMEA_SENTENCE_RMC: {
+            struct minmea_sentence_rmc rmcdata;
+            if (minmea_parse_rmc(&rmcdata, line)) {
+                if (rmcdata.valid) {
+                    log_debug("rmc ok + fix");
+                } else {
+                    log_debug("rmc ok no fix");
+                }
+            } else {
+                log_debug("rmc nok");
+            }
+            // could be useful but GGA has more data - ignore
+            nd->prec = 0;
+            return true;
+        }
         default: {
             // ignore, but not an error
             nd->prec = 0;
+            log_debug("gps[%d][%c%c%c%c%c%c]", si, line[0],line[1],line[2],line[3],line[4],line[5]);
             return true;
         }
     }
