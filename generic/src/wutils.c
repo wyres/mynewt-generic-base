@@ -53,14 +53,23 @@ void wassert_fn(const char* file, int lnum) {
         }
     }
 }
+
+// This is the assert fn mapped to by OS_CRASH() in os_fault.h which is mapped by the system assert.h in mynewt
+void wassert_fn_cb(const char* file, int lnum, const char *func, const char *e) {
+    wassert_fn(file, lnum);
+}
+
 /*
-// This is the assert fn mapped to by OS_CRASH() which is mapped by the system assert.h in mynewt
 void __assert_func(const char *file, int line, const char *func, const char *e) {
     wassert_fn(NULL,line);
     // actually wassert_fn never returns
     exit(-1);
 }
 */
+// Override/callback from reboot.
+void wreboot_cb(void) {
+    RMMgr_reboot(RM_ASSERT);
+}
 
 #define MAX_LOGSZ 256
 // Must be static buffer NOT ON STACK
@@ -178,6 +187,13 @@ void log_noout_fn(const char* ls, ...) {
     _noutbuf[l++] = '\r';
     _noutbuf[l++] = '\0';
     va_end(vl);
+}
+
+// Log passage in a fn by recording its address for later analysis
+void log_fn_fn() {
+//    void* caller = __builtin_extract_return_addr(__builtin_return_address(0));
+    // TODO add to PROM based circular list along with timestamp
+//    add_to_circ(TMMgr_getRelTime(), caller);
 }
 
 bool unittest(const char* tn, bool res) {

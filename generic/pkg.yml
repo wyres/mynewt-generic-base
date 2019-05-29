@@ -25,3 +25,9 @@ pkg.homepage: "http://www.wyres.fr/"
 pkg.keywords:
 
 pkg.deps:
+    - "@apache-mynewt-core/kernel/os"
+    - "@apache-mynewt-core/hw/hal"
+    - "@lorawan/lorawan_api"
+    - "@lorawan/lorawan_wrapper"
+    - "@wyres-gitlab-mynewt-bsp/w_base"
+

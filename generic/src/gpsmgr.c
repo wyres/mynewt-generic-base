@@ -78,6 +78,7 @@ void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect) {
 
 bool getGPSData(gps_data_t* d) {
     bool ret = false;
+    memset(d, 0, sizeof(gps_data_t));
         // mutex lock
     os_mutex_pend(&_ctx.dataMutex, OS_TIMEOUT_NEVER);
     if (_ctx.gpsData.rxAt>0) {

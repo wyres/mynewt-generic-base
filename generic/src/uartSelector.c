@@ -12,7 +12,7 @@
 
 static int8_t _gpio0;
 static int8_t _gpio1;
-static uint8_t _current;
+static int8_t _current;
 
 void uart_selector_init(int8_t gpio0, int8_t gpio1) {
     _gpio0 = gpio0;
@@ -20,12 +20,14 @@ void uart_selector_init(int8_t gpio0, int8_t gpio1) {
     if (_gpio0<0 || _gpio1<0) {
         return;
     }
-    _current = 0;
     GPIO_define_out("US0", gpio0, 0, LP_DEEPSLEEP);
     GPIO_define_out("US1", gpio1, 0, LP_DEEPSLEEP);
+    // initialise in hiZ
+    uart_select(MYNEWT_VAL(HIZ_UART_SELECT));
 }
-uint8_t uart_select(uint8_t id) {
-    uint8_t ret = _current;
+
+int8_t uart_select(int8_t id) {
+    int8_t ret = _current;
     if (_gpio0<0 || _gpio1<0) {
         return -1;
     }

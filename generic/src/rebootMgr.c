@@ -66,6 +66,8 @@ const char* RMMgr_getResetReason() {
     return _resetReason;
 }
 
+// TODO want a last N reboot reasons list 
+
 void RMMgr_saveAssertCaller(void* fnaddr) {
     _assertCallerFn = fnaddr;
     CFMgr_setElement(CFG_UTIL_KEY_ASSERTCALLERFN, &_assertCallerFn, 4);
