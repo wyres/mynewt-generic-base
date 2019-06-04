@@ -11,10 +11,13 @@ typedef enum { UPRIGHT, INVERTED, FLAT_BACK, FLAT_FACE, UNKNOWN} MM_ORIENT;
 typedef void (*MM_CBFN_t)(void);
 
 bool MMMgr_register(MM_CBFN_t cb);
+uint8_t MMMgr_getMovedMask();
 uint32_t MMMgr_getLastMovedTime();
 bool MMMgr_hasMovedSince(uint32_t reltime);
+uint8_t MMMgr_getFallMask();
 uint32_t MMMgr_getLastFallTime();
 bool MMMgr_hasFallenSince(uint32_t reltime);
+uint8_t MMMgr_getShockMask();
 uint32_t MMMgr_getLastShockTime();
 bool MMMgr_hasShockedSince(uint32_t reltime);
 MM_ORIENT MMMgr_getOrientation();

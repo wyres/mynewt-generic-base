@@ -19,8 +19,6 @@ typedef void (*WBLE_CB_FN_t)(ibeacon_data_t* b);
 
 void wble_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect);
 
-// Get current list of ibeacons. Returns 0 for sucess, -1 for failure
-int getBeaconList(uint8_t* sz, ibeacon_data_t** list);
 // start connection
 void wble_start();
 // Stop operation
@@ -31,6 +29,8 @@ void wble_scan_stop();
 // configure ibeacon operation (when not scanning)
 void wble_ibeacon_start(const char* uuid, uint16_t maj, uint16_t min, uint8_t extra);
 void wble_ibeacon_stop();
+// get the list of IBs (best to do this once stopped)
+ibeacon_data_t* wble_getIBList(uint8_t* sz);
 
 #ifdef __cplusplus
 }

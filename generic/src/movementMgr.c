@@ -71,11 +71,17 @@ void MMMgr_check() {
     }
     _movedSinceLastCheck = true;
 }
+uint8_t MMMgr_getMovedMask() {
+    return 0;       // TODO
+}
 uint32_t MMMgr_getLastMovedTime() {
     return _lastMoveTime;
 }
 bool MMMgr_hasMovedSince(uint32_t reltime) {
     return (_lastMoveTime>reltime);
+}
+uint8_t MMMgr_getFallMask() {
+    return 0;       // TODO
 }
 uint32_t MMMgr_getLastFallTime() {
     return _lastFallTime;
@@ -83,6 +89,10 @@ uint32_t MMMgr_getLastFallTime() {
 bool MMMgr_hasFallenSince(uint32_t reltime) {
     return (_lastFallTime>reltime);
 }
+uint8_t MMMgr_getShockMask() {
+    return 0;       // TODO
+}
+
 uint32_t MMMgr_getLastShockTime() {
     return _lastShockTime;
 }
