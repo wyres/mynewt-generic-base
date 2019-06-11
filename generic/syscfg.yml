@@ -55,6 +55,9 @@ syscfg.defs:
     SM_MAX_SMS:
         description: "max state machines"
         value: 4
+    WBLE_MAXIBS:
+        description: "max number of ibeacons held by the wble scanner per scan"
+        value: 16
 
 syscfg.vals:
     # hook reboot and assert operations in mynewt OS

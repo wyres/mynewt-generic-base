@@ -10,6 +10,7 @@ extern "C" {
 // TODO check if this is ok to remove the calls completely from the binary
 #define assert(__e) {do{}while(0);}
 #define log_debug(__s) {do{}while(0);}
+#define log_info(__s) {do{}while(0);}
 #define log_warn(__s) {do{}while(0);}
 #define log_error(__s) {do{}while(0);}
 #define log_noout(__s) {do{}while(0);}
@@ -23,6 +24,7 @@ extern "C" {
     #define assert(__e) ((__e) ? (void)0 : wassert_fn(NULL, 0))
 #endif
 #define log_debug log_debug_fn
+#define log_info log_debug_fn
 #define log_warn log_warn_fn
 #define log_error log_error_fn
 #define log_noout log_noout_fn
