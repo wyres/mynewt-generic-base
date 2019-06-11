@@ -31,3 +31,12 @@ pkg.deps:
     - "@lorawan/lorawan_wrapper"
     - "@wyres-gitlab-mynewt-bsp/w_base"
 
+pkg.init:
+    CFMgr_init : 100
+    reboot_init : 101
+    gpio_mgr_init : 102
+    led_mgr_init : 103
+    uart_line_comm_init : 104
+#    movement_init : 106
+    init_sm_exec : 110
+

@@ -58,6 +58,10 @@ syscfg.defs:
     WBLE_MAXIBS:
         description: "max number of ibeacons held by the wble scanner per scan"
         value: 16
+    CFG_MAX_KEYS:
+        description: "max number of config keys we will ever have"
+        value: 200
+
 
 syscfg.vals:
     # hook reboot and assert operations in mynewt OS
