@@ -1,5 +1,16 @@
 /**
- * Wyres private code
+ * Copyright 2019 Wyres
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, 
+ * software distributed under the License is distributed on 
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, 
+ * either express or implied. See the License for the specific 
+ * language governing permissions and limitations under the License.
+*/
+/**
  * Manage reboot : saving logs, code passage ids etc into flash, indicating reset reasons etc
  */
 #include "os/os.h"
@@ -64,6 +75,10 @@ void RMMgr_reboot(uint8_t reason) {
 const char* RMMgr_getResetReason() {
     // Recovered from PROM at boot time
     return _resetReason;
+}
+uint16_t RMMgr_getResetReasonCode() {
+    // Recovered from PROM at boot time
+    return _appReasonCode + (hal_reset_cause() << 8);
 }
 
 // TODO want a last N reboot reasons list 

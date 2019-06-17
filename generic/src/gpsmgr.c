@@ -1,6 +1,16 @@
 /**
- Wyres private code
- */
+ * Copyright 2019 Wyres
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, 
+ * software distributed under the License is distributed on 
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, 
+ * either express or implied. See the License for the specific 
+ * language governing permissions and limitations under the License.
+*/
+
 
 #include "os/os.h"
 #include "wyres-generic/wutils.h"
@@ -18,6 +28,13 @@
 
 static os_stack_t _gps_task_stack[GPS_TASK_STACK_SZ];
 static struct os_task gps_mgr_task_str;
+
+// L96 GPS commands    
+static char* EASY_ON="$PMTK869,1,1*35\r\n";
+static char* HOT_START="$PMTK101*32\r\n";
+static char* COLD_START="$PMTK103*30\r\n";
+// Standby mode is 500uA, but can be exited by uart data...
+static char* STANDBY_MODE="$PMTK161,0*28\r\n";
 
 static struct {
     struct os_event myGPSEvent;
@@ -128,15 +145,23 @@ void gps_start(GPS_CB_FN_t cbfn) {
         .param = MYNEWT_VAL(GPS_UART_BAUDRATE),
     };
     wskt_ioctl(_ctx.cnx, &cmd);
-    // Don't need to write to anything
+    wskt_write(_ctx.cnx, (uint8_t*)EASY_ON, strlen(EASY_ON));
+    if (gps_lastGPSFixAgeMins() < 0 || gps_lastGPSFixAgeMins()>3*60) {
+        wskt_write(_ctx.cnx, (uint8_t*)COLD_START, strlen(COLD_START));
+    } else {
+        wskt_write(_ctx.cnx, (uint8_t*)HOT_START, strlen(HOT_START));
+    }
 }
 void gps_stop() {
-    if (_ctx.cnx!=NULL) {
-        wskt_close(&_ctx.cnx);
-    }
     if (_ctx.pwrPin>=0) {
-        log_debug("gps power OFF using pin %d", _ctx.pwrPin);
-        GPIO_write(_ctx.pwrPin, 1);
+//        log_debug("gps power OFF using pin %d", _ctx.pwrPin);
+//        GPIO_write(_ctx.pwrPin, 1);
+        log_debug("gps power LEFT ON using pin %d", _ctx.pwrPin);
+    } else {
+        wskt_write(_ctx.cnx, (uint8_t*)STANDBY_MODE, strlen(STANDBY_MODE));
+    }
+    if (_ctx.cnx!=NULL) {
+        wskt_close(&_ctx.cnx);      // should take effect after empty of current tx buffer...
     }
     _ctx.cbfn = NULL;
 }

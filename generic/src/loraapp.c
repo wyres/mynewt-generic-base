@@ -1,7 +1,15 @@
 /**
- * Wyres private code
- * Lorawan app code 
- */
+ * Copyright 2019 Wyres
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, 
+ * software distributed under the License is distributed on 
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, 
+ * either express or implied. See the License for the specific 
+ * language governing permissions and limitations under the License.
+*/
 
 #include <string.h>
 
@@ -369,26 +377,30 @@ static void loraapp_task(void* data) {
             _canTx = false;
             lorawan_event_t txev = lorawan_wait_ev(_sock_tx, (LORAWAN_EVENT_ACK|LORAWAN_EVENT_ERROR|LORAWAN_EVENT_SENT), _loraCfg.txTimeoutMs);
             // note sema is now taken (==0), so next time round will block until a tx call adds a token
-            log_debug("tx ev returns, event is %02x", txev);
             assert(_txcbfn!=NULL);      // must have a cb fn if we created the socket...
             if (txev & LORAWAN_EVENT_ACK) {
+                log_debug("tx ev OK ACK");
                 (*_txcbfn)(LORA_TX_OK_ACKD);
             }
             if (txev & LORAWAN_EVENT_SENT) {
+                log_debug("tx ev OK NOACK");
                 (*_txcbfn)(LORA_TX_OK);
             }
             if (txev & LORAWAN_EVENT_ERROR) {
                 // Check if we are joined
                 if (lora_app_isJoined()) {
+                    log_debug("tx ev ERR (joined)");
                     (*_txcbfn)(LORA_TX_ERR_RETRY);
                 } else {
                     // Not joined this is why an error
+                    log_debug("tx ev ERR (NOT joined)");
                     (*_txcbfn)(LORA_TX_ERR_NOTJOIN);
 
                 }
             }
             if (txev==0) {
                 // timeout
+                log_debug("tx ev TIMEOUT");
                 (*_txcbfn)(LORA_TX_TIMEOUT);
             }
         }

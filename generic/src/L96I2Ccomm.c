@@ -1,5 +1,16 @@
 /**
- Wyres private code
+ * Copyright 2019 Wyres
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, 
+ * software distributed under the License is distributed on 
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, 
+ * either express or implied. See the License for the specific 
+ * language governing permissions and limitations under the License.
+*/
+/**
  * L96 manager device that maps I2C L96 operation to a uart like line by line operation, using a socket paradigm
  * This is a wyres device, the methods are only called via the socket emulator (not directly)
  * Each instance of a UART must be initialised at startup by registering it with the socket driver (see wskt)

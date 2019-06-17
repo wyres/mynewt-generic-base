@@ -1,5 +1,16 @@
 /**
- * Wyres private code
+ * Copyright 2019 Wyres
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, 
+ * software distributed under the License is distributed on 
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, 
+ * either express or implied. See the License for the specific 
+ * language governing permissions and limitations under the License.
+*/
+/**
  * UART manager device that maps char by char to line by line operation, using a socket paradigm
  * This is a wyres device, the methods are only called via the socket emulator (not directly)
  * Each instance of a UART must be initialised at startup by registering it with the socket driver (see wskt)
@@ -208,18 +219,15 @@ static int uart_line_write(wskt_t* skt, uint8_t* data, uint32_t sz) {
 static int uart_line_close(wskt_t* skt) {
     struct UARTDeviceCfg* cfg=((struct UARTDeviceCfg*)WSKT_DEVICE_CFG(skt));  
 
-    // Iff last skt then power down
+    // Iff last skt then close mynewt uart device
     if (wskt_getOpenSockets(cfg->dname, NULL, 0)<=1) {
         if (cfg->uartDev!=NULL) {
             os_dev_close(cfg->uartDev);
             cfg->uartDev = NULL;
         }
-        // clean buffers
-        circ_bbuf_init(&cfg->rxBuff, &(cfg->rxBuff_data_space[0]), UART_LINE_SZ+1);
-        circ_bbuf_init(&cfg->txBuff, &(cfg->txBuff_data_space[0]), UART_LINE_SZ+1);
         log_uartbdg("closed last socket on uart %s", cfg->dname);
     }
-
+    // leave any buffers to be tx'd in their own time
     return SKT_NOERR; 
 }
 #define LF (0x0A)

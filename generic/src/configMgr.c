@@ -1,5 +1,16 @@
 /**
- * Wyres private code
+ * Copyright 2019 Wyres
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, 
+ * software distributed under the License is distributed on 
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, 
+ * either express or implied. See the License for the specific 
+ * language governing permissions and limitations under the License.
+*/
+/**
  * Config manager
  * Allows definition of config elements which are opaque and up to 255 bytes long
  * These are stored/retrieved from either FLASH or PROM
@@ -13,23 +24,46 @@
 #define MAX_KEYS 200 //MYNEWT_VAL(CFG_MAX_KEYS)
 #define INDEX_SIZE  (5)
 #define NVM_HDR_SIZE (0x10)
+#define MAX_CFG_CBS 10
 
 struct cfg {
+    uint8_t nbKeys;
     uint16_t indexStart;
     uint16_t storeStart;
     uint16_t storeOffset;
-    uint8_t nbKeys;
-    struct {
-        uint16_t key;
-        uint8_t len;
-        uint16_t off;
-    } indexTable[MAX_KEYS];
-} _cfg;
+    uint8_t nCBs;
+    CFG_CBFN_t cbList[MAX_CFG_CBS];
+    // use table in PROM directly to avoid using up the RAM
+//    struct {
+//        uint16_t key;
+//        uint8_t len;
+//        uint16_t off;
+//    } indexTable[MAX_KEYS];
+} _cfg = {
+    .nbKeys=0,
+    .indexStart=0,
+    .storeStart=0,
+    .storeOffset=0,
+    .nCBs=0,
+};
 
 static int createKey(uint16_t k, uint8_t l);
 static int findKeyIdx(uint16_t k);
+static uint16_t getIdxKey(int idx);
+static uint8_t getIdxLen(int idx);
+static uint16_t getIdxOff(int idx);
+static void informListeners(uint16_t key);
 
 // See eeprom_board.c in src/board/iM880C for basic access methods eg EEPROM_SaveConfiguration() (but do it much better)
+
+// Register a callback fn for whenever the cfg changes
+bool CFMgr_registerCB(CFG_CBFN_t cb) {
+    if (_cfg.nCBs>=MAX_CFG_CBS) {
+        return false;
+    }
+    _cfg.cbList[_cfg.nCBs++] = cb;
+    return true;
+}
 
 // Add a new element definition key. If the key is already known AND has the same len, this is a noop. 
 // If the key exists but has a different length, false is returned.
@@ -37,7 +71,7 @@ static int findKeyIdx(uint16_t k);
 bool CFMgr_addElementDef(uint16_t key, uint8_t len, void* initdata) {
     int idx = findKeyIdx(key);
     if (idx>=0) {
-        if (_cfg.indexTable[idx].len == len) {
+        if (getIdxLen(idx) == len) {
             return true;
         }
         return false;       // exists already but with different len!
@@ -47,7 +81,7 @@ bool CFMgr_addElementDef(uint16_t key, uint8_t len, void* initdata) {
         return false;       // full up, sorry
     }
     // Write data
-    return nvmWrite(_cfg.indexTable[idx].off, len, (uint8_t*)initdata);
+    return nvmWrite(getIdxOff(idx), len, (uint8_t*)initdata);
 }
 
 bool CFMgr_getOrAddElement(uint16_t key, void* data, uint8_t len) {
@@ -58,17 +92,17 @@ bool CFMgr_getOrAddElement(uint16_t key, void* data, uint8_t len) {
             return false;
         }
         // Write the given data as the initial value and return
-        return nvmWrite(_cfg.indexTable[idx].off, _cfg.indexTable[idx].len, (uint8_t*)data);
+        return nvmWrite(getIdxOff(idx), getIdxLen(idx), (uint8_t*)data);
     }
     // read data
-    return nvmRead(_cfg.indexTable[idx].off, _cfg.indexTable[idx].len, (uint8_t*)data);
+    return nvmRead(getIdxOff(idx), getIdxLen(idx), (uint8_t*)data);
 }
 uint8_t CFMgr_getElementLen(uint16_t key) {
     int idx = findKeyIdx(key);
     if (idx<0) {
         return 0;
     }
-    return _cfg.indexTable[idx].len;
+    return getIdxLen(idx);
 }
 // Set an element value. Creates key if unknown if it can
 bool CFMgr_setElement(uint16_t key, void* data, uint8_t len) {
@@ -80,7 +114,10 @@ bool CFMgr_setElement(uint16_t key, void* data, uint8_t len) {
         }
     }
     // Write data
-    return nvmWrite(_cfg.indexTable[idx].off, len, (uint8_t*)data);
+    bool ret = nvmWrite(getIdxOff(idx), len, (uint8_t*)data);
+    // Tell cfg listeners
+    informListeners(key);
+    return ret;
 }
 
 bool CFMgr_resetElement(uint16_t key) {
@@ -90,15 +127,26 @@ bool CFMgr_resetElement(uint16_t key) {
     }
     // Write 0 data
     nvmUnlock();
-    for(int i=0;i<_cfg.indexTable[idx].len;i++) {
-        nvmWrite8(_cfg.indexTable[idx].off + i, 0);
+    uint8_t vlen = getIdxLen(idx);
+    uint16_t voff = getIdxOff(idx);
+    for(int i=0;i<vlen;i++) {
+        nvmWrite8(voff + i, 0);
     }
     nvmLock();
 
+    // Tell cfg listeners
+    informListeners(key);
     return true;
 }
 
 // Internals
+
+static void informListeners(uint16_t key) {
+    // tell anyone that cares
+    for(int i=0;i<_cfg.nCBs;i++) {
+        (*(_cfg.cbList[i]))(key);
+    }
+}
 /** PROM layout
 0000 [nbKeys(Pri)] [nbKeys(Sec)] [IdxStart_LSB] [IdxStart_MSB] [StoreStart_LSB] [StoreStart_MSB] [RFU=0]x10
 0010-(0x10+MAX_KEYS*5) [[Key_LSB] [K_MSB] [Len] [StoreOff_LSB][StoreOff_MSB]] x nbKeys (max 200)
@@ -112,7 +160,7 @@ bool CFMgr_resetElement(uint16_t key) {
  * read in Idx, updating StoreOffset at each entry read to be its StoreOff+len.
  */
 void CFMgr_init(void) {
-    // ? neccessary to unlock to READ?
+   // ? neccessary to unlock to READ?
     nvmUnlock();
     uint8_t nbK_pri = nvmRead8(0);
     uint8_t nbK_sec = nvmRead8(1);
@@ -135,6 +183,7 @@ void CFMgr_init(void) {
         nvmWrite16(2, _cfg.indexStart);
         nvmWrite16(4, _cfg.storeStart);
     }
+/*
     // Calculate where next free space in store it while reading the key index into ram
     for(int i=0;i<_cfg.nbKeys; i++) {
         _cfg.indexTable[i].key = nvmRead16(_cfg.indexStart+(i*INDEX_SIZE));
@@ -142,6 +191,15 @@ void CFMgr_init(void) {
         _cfg.indexTable[i].off = nvmRead16(_cfg.indexStart+(i*INDEX_SIZE)+3);
         _cfg.storeOffset = _cfg.indexTable[i].off + _cfg.indexTable[i].len;
     }
+*/
+    if (_cfg.nbKeys==0) {
+        // no keys its at the store start
+        _cfg.storeOffset = _cfg.storeStart;
+    } else {
+        // Its after the last one
+        _cfg.storeOffset = getIdxOff(_cfg.nbKeys-1) + getIdxLen(_cfg.nbKeys-1);
+    }
+
     nvmLock();
 
     // ready to roll
@@ -171,9 +229,9 @@ static int createKey(uint16_t k, uint8_t l) {
     nvmWrite8(_cfg.indexStart+ret*INDEX_SIZE+2, l);
     nvmWrite16(_cfg.indexStart+ret*INDEX_SIZE+3, _cfg.storeOffset);
     // update memory copy
-    _cfg.indexTable[ret].key = k;
-    _cfg.indexTable[ret].len = l;
-    _cfg.indexTable[ret].off = _cfg.storeOffset;
+//    _cfg.indexTable[ret].key = k;
+//    _cfg.indexTable[ret].len = l;
+//    _cfg.indexTable[ret].off = _cfg.storeOffset;
 
     // Move next free space in store along    
     _cfg.storeOffset+=l;
@@ -189,13 +247,34 @@ static int createKey(uint16_t k, uint8_t l) {
 // Find the index in the key table for the given key, or -1 if not found
 static int findKeyIdx(uint16_t k) {
     for(int i=0;i<_cfg.nbKeys; i++) {
-        if (_cfg.indexTable[i].key == k) {
+//        if (_cfg.indexTable[i].key == k) {
+        if (getIdxKey(i) == k) {    
             return i;
         }
     }
     return -1;
 }
 
+static uint16_t getIdxKey(int idx) {
+    if (idx<0 || idx>=_cfg.nbKeys) {
+        return 0;
+    }
+    return nvmRead16(_cfg.indexStart+(idx*INDEX_SIZE));
+
+}
+static uint8_t getIdxLen(int idx) {
+    if (idx<0 || idx>=_cfg.nbKeys) {
+        return 0;
+    }
+    return nvmRead8(_cfg.indexStart+(idx*INDEX_SIZE)+2);
+    
+}
+static uint16_t getIdxOff(int idx) {
+    if (idx<0 || idx>=_cfg.nbKeys) {
+        return 0;
+    }
+    return nvmRead16(_cfg.indexStart+(idx*INDEX_SIZE)+3);    
+}
 
 
 #ifdef UNITTEST
