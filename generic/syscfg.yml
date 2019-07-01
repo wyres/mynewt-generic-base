@@ -54,7 +54,7 @@ syscfg.defs:
         value: 16
     SM_MAX_SMS:
         description: "max state machines"
-        value: 4
+        value: 8
     WBLE_MAXIBS:
         description: "max number of ibeacons held by the wble scanner per scan"
         value: 16
@@ -63,6 +63,13 @@ syscfg.defs:
         value: 200
 
 
+    UART_SELECT0:
+        description: "gpio pin for uart selector bit0"
+        value: -1
+    UART_SELECT1:
+        description: "gpio pin for uart selector bit1"
+        value: -1
+        
 syscfg.vals:
     # hook reboot and assert operations in mynewt OS
 #    HAL_SYSTEM_RESET_CB: wreboot_cb

@@ -25,8 +25,9 @@ void RMMgr_reboot(uint8_t reason);
 void RMMgr_saveAssertCaller(void* fnaddr);
 uint32_t RMMgr_getLastAssertCallerLoc();
 void* RMMgr_getLastAssertCallerFn();
+bool RMMgr_wasHardReset();
 
-enum RM_reason { RM_ASSERT, RM_WATCHDOG, RM_RADIO_ERR, RM_HW_ERR, RM_DM_ACTION, RM_AT_ACTION };
+enum RM_reason { RM_HARD_RESET = 0, RM_ASSERT, RM_WATCHDOG, RM_RADIO_ERR, RM_HW_ERR, RM_DM_ACTION, RM_AT_ACTION };
 
 #ifdef __cplusplus
 }

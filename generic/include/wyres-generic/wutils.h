@@ -26,6 +26,7 @@ extern "C" {
 #define log_warn(__s) {do{}while(0);}
 #define log_error(__s) {do{}while(0);}
 #define log_noout(__s) {do{}while(0);}
+#define log_blocking(__s) {do{}while(0);}
 #define log_fn(__s) {do{}while(0);}
 
 #else /* NDEBUG */
@@ -40,6 +41,7 @@ extern "C" {
 #define log_warn log_warn_fn
 #define log_error log_error_fn
 #define log_noout log_noout_fn
+#define log_blocking log_blocking_fn
 #define log_fn log_fn_fn
 
 #endif /* NDEBUG */
@@ -55,6 +57,7 @@ void log_debug_fn(const char* sl, ...);
 void log_warn_fn(const char* sl, ...);
 void log_error_fn(const char* sl, ...);
 void log_noout_fn(const char* sl, ...);
+void log_blocking_fn(int u, const char* sl, ...);
 void log_fn_fn();
 
 

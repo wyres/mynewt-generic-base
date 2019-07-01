@@ -71,7 +71,7 @@ static int addIB(ibeacon_data_t* ibp);
 // State machine for BLE control
 enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_WAIT_TYPE, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, MS_BLE_IBEACON, MS_BLE_STOPPING, MS_BLE_LAST };
 enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_SCAN, ME_BLE_IBEACON, ME_BLE_STOP, ME_BLE_RET_OK, ME_BLE_RET_ERR, ME_BLE_RET_INT, ME_BLE_UPDATE };
-SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
+static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
@@ -126,7 +126,7 @@ SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
     assert(0);      // shouldn't get here
 }
 // Wait 500ms or for a READY for module to get its act together
-SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
+static SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
@@ -156,7 +156,7 @@ SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
     assert(0);      // shouldn't get here
 }
 // Put module into scanner mode and wait for response
-SM_STATE_ID_t State_WaitTypeSet(void* arg, int e, void* data) {
+static SM_STATE_ID_t State_WaitTypeSet(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
@@ -186,7 +186,7 @@ SM_STATE_ID_t State_WaitTypeSet(void* arg, int e, void* data) {
     assert(0);      // shouldn't get here
 }
 // power on, send WHO to check comm ok
-SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
+static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
@@ -227,7 +227,7 @@ SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-SM_STATE_ID_t State_On(void* arg, int e, void* data) {
+static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
@@ -267,7 +267,7 @@ SM_STATE_ID_t State_On(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
+static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
@@ -332,7 +332,7 @@ SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-SM_STATE_ID_t State_IBeacon(void* arg, int e, void* data) {
+static SM_STATE_ID_t State_IBeacon(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
@@ -372,7 +372,7 @@ SM_STATE_ID_t State_IBeacon(void* arg, int e, void* data) {
 }
 
 // State table : note can be in any order as the 'id' field is what maps the state id to the rest
-SM_STATE_t _bleSM[MS_BLE_LAST] = {
+static SM_STATE_t _bleSM[MS_BLE_LAST] = {
     {.id=MS_BLE_OFF,        .name="BleOff",       .fn=State_Off},
     {.id=MS_BLE_WAITPOWERON,.name="BleWaitPower", .fn=State_WaitPoweron},
     {.id=MS_BLE_WAIT_TYPE,.name="BleWaitPower", .fn=State_WaitTypeSet},
@@ -436,6 +436,34 @@ ibeacon_data_t* wble_getIBList(uint8_t* sz) {
     return &_ctx.ibList[0];
 }
 
+//Copy 'best' sz elements into the given list (of max sz). Return actual number copied
+uint8_t wble_getSortedIBList(uint8_t sz, ibeacon_data_t* list) {
+    assert(list!=NULL);
+    int prevRssi = 0;
+    for(int insert=0;insert<sz;insert++) {
+        // pass thru list getting element that is best but worse than previous
+        int bestRssi = -150;
+        int idxToGet = -1;
+        for(int i=0;i<_ctx.ibListSz;i++) {
+            if (_ctx.ibList[i].rssi>bestRssi && _ctx.ibList[i].rssi<prevRssi) {
+                idxToGet = i;
+                bestRssi = _ctx.ibList[i].rssi;
+            }
+        }
+        if (idxToGet>=0) {
+            prevRssi = bestRssi;
+            list[insert].major = _ctx.ibList[idxToGet].major;
+            list[insert].minor = _ctx.ibList[idxToGet].minor;
+            list[insert].rssi = _ctx.ibList[idxToGet].rssi;
+            list[insert].extra = _ctx.ibList[idxToGet].extra;
+        } else {
+            // all done
+            return insert;
+        }
+    }
+    return sz;
+}
+
 // task just runs the callbacks
 static void wble_mgr_task(void* arg) {
     while(1) {
@@ -453,7 +481,7 @@ static ibeacon_data_t* getIB(int idx) {
     return &_ctx.ibList[idx];
 }
 
-// Add scanned IB to list if not already present else update it
+// Add scanned IB to list if not already present  else update it
 static int addIB(ibeacon_data_t* ibp) {
     // Find if already in list, update if so
     int worstRSSIIdx = 0;

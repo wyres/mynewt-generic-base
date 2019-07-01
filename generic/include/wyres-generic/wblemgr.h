@@ -43,7 +43,8 @@ void wble_ibeacon_start(const char* uuid, uint16_t maj, uint16_t min, uint8_t ex
 void wble_ibeacon_stop();
 // get the list of IBs (best to do this once stopped)
 ibeacon_data_t* wble_getIBList(uint8_t* sz);
-
+// copy out sorted list of beacons up to sz elements into caller provided list
+uint8_t wble_getSortedIBList(uint8_t sz, ibeacon_data_t* list);
 #ifdef __cplusplus
 }
 #endif

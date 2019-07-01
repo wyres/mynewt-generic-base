@@ -35,10 +35,13 @@ bool CFMgr_resetElement(uint16_t key);
 #define CFG_MODULE_LORA 1
 #define CFG_MODULE_APP 2
 #define CFG_MODULE_WYRES 3
+#define CFG_MODULE_APP_CORE 4
+#define CFG_MODULE_APP_MOD 5
 
-// Config keys used in the wyres generic utils
-#define CFG_UTIL_KEY_REBOOTREASON CFGKEY(CFG_MODULE_UTIL, 1)
-#define CFG_UTIL_KEY_ASSERTCALLERLOC CFGKEY(CFG_MODULE_UTIL, 2)
+// Config keys used in the wyres generic utils - a key of 0 is never used
+#define CFG_KEY_ILLEGAL (0)
+#define CFG_UTIL_KEY_REBOOTREASON   CFGKEY(CFG_MODULE_UTIL, 1)
+#define CFG_UTIL_KEY_FN_LIST        CFGKEY(CFG_MODULE_UTIL, 2)
 #define CFG_UTIL_KEY_ASSERTCALLERFN CFGKEY(CFG_MODULE_UTIL, 3)
 
 #ifdef __cplusplus

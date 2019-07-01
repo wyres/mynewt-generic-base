@@ -22,7 +22,8 @@ static int8_t _gpio0;
 static int8_t _gpio1;
 static int8_t _current;
 
-void uart_selector_init(int8_t gpio0, int8_t gpio1) {
+
+static void uart_selector_setup(int8_t gpio0, int8_t gpio1) {
     _gpio0 = gpio0;
     _gpio1 = gpio1;
     if (_gpio0<0 || _gpio1<0) {
@@ -34,7 +35,14 @@ void uart_selector_init(int8_t gpio0, int8_t gpio1) {
     uart_select(MYNEWT_VAL(HIZ_UART_SELECT));
 }
 
+// Called from sysinit early on
+void uart_selector_init(void) {
+    // module to select uart switcher - tell it the io lines to control it
+    uart_selector_setup(MYNEWT_VAL(UART_SELECT0), MYNEWT_VAL(UART_SELECT1));
+}
+
 int8_t uart_select(int8_t id) {
+    // TODO deal with locking etc
     int8_t ret = _current;
     if (_gpio0<0 || _gpio1<0) {
         return -1;

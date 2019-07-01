@@ -122,12 +122,12 @@ static void do_log(char lev, const char* ls, va_list vl) {
         // select it on uart switcher..
         uart_select(_uartSelect);
 
-        if (wskt_write(_uartSkt, (uint8_t*)_buf, len)<0) {
-           wskt_t* ts = _uartSkt;
-           _uartSkt = NULL;
-           // aie aie
-           wskt_close(&ts);   // before doing logs
-           log_noout_fn("log write FAIL");
+        int res = wskt_write(_uartSkt, (uint8_t*)_buf, len);
+        if (res<0) {
+            _buf[0] = '*';
+            wskt_write(_uartSkt, (uint8_t*)_buf, 1);      // so user knows he missed something.
+            // Not actually a lot we can do about this especially if its a flow control (SKT_NOSPACE) condition - ignore it
+           log_noout_fn("log write FAIL");      // just for debugger to watch
        }
    }
 }
@@ -192,18 +192,24 @@ void log_noout_fn(const char* ls, ...) {
     va_start(vl, ls);
     vsprintf(_noutbuf, ls, vl);
     // watch _noutbuf to see the log
-    int l = strlen(_buf);
+    int l = strlen(_noutbuf);
     _noutbuf[l++] = '\n';
     _noutbuf[l++] = '\r';
     _noutbuf[l++] = '\0';
     va_end(vl);
 }
-
-// Log passage in a fn by recording its address for later analysis
-void log_fn_fn() {
-//    void* caller = __builtin_extract_return_addr(__builtin_return_address(0));
-    // TODO add to PROM based circular list along with timestamp
-//    add_to_circ(TMMgr_getRelTime(), caller);
+void log_blocking_fn(int u, const char* ls, ...) {
+    va_list vl;
+    va_start(vl, ls);
+    vsprintf(_noutbuf, ls, vl);
+    int l = strlen(_noutbuf);
+    // blocking write to uart 
+    for(int i=0;i<l;i++) {
+        hal_uart_blocking_tx(u, _noutbuf[i]);
+    }
+    hal_uart_blocking_tx(u, '\n');
+    hal_uart_blocking_tx(u, '\r');
+    va_end(vl);
 }
 
 bool unittest(const char* tn, bool res) {

@@ -22,36 +22,55 @@
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/configmgr.h"
 #include "wyres-generic/rebootMgr.h"
+#include "wyres-generic/timemgr.h"
 
 // Led task should be high pri as does very little but wants to do it in real time
 #define WATCHDOG_TASK_PRIO       MYNEWT_VAL(WATCHDOG_TASK_PRIO)
 #define WATCHDOG_TASK_STACK_SZ   OS_STACK_ALIGN(32)
+
+#define REBOOT_LIST_SZ  (8)
+#define FN_LIST_SZ  (8*8)   // for 8 entries, each of 2 uint32_ts
 
 static void watchdog_task(void* arg);
 
 static os_stack_t _watchdog_task_stack[WATCHDOG_TASK_STACK_SZ];
 static struct os_task _watchdog_task_str;
 
-static char* _resetReason="AP/M";
+static char* _resetReason="AP/M\0";
 static uint8_t _appReasonCode = 0;
-static uint32_t _assertCallerLoc = 0;
+// reboot reason codes + last byte for index
+static uint8_t _rebootReasonList[REBOOT_LIST_SZ+1];
+// fn call log + last byte for index
+static uint8_t _fnList[FN_LIST_SZ+1];
+
 static void* _assertCallerFn = 0;
 
 // run at startup
 void reboot_init(void) {
     // get reboot reason from PROM
-    _appReasonCode = 0;
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_REBOOTREASON, &_appReasonCode, 1);
-    // and zero the PROM value so we known next time
-    CFMgr_resetElement(CFG_UTIL_KEY_REBOOTREASON);
-    // _appReasonCode = PROM_read(X);
+    // Its a circular list, last byte is current index
+    memset(_rebootReasonList, 0, REBOOT_LIST_SZ+1);
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_REBOOTREASON, &_rebootReasonList, REBOOT_LIST_SZ+1);
+    if (_rebootReasonList[REBOOT_LIST_SZ]>REBOOT_LIST_SZ) {
+        log_noout("reboot list index is bad %d", _rebootReasonList[REBOOT_LIST_SZ]);
+        _rebootReasonList[REBOOT_LIST_SZ] = 0;
+    }
+    // Store the last restart reason in separate var for ease of use
+    _appReasonCode = _rebootReasonList[_rebootReasonList[REBOOT_LIST_SZ]];
+    // inc index to next position ready for next restart
+    _rebootReasonList[REBOOT_LIST_SZ] = ((_rebootReasonList[REBOOT_LIST_SZ]+1) % REBOOT_LIST_SZ);
+    // Set the next reboot reason to hard reset (in case it is as we won't go via reboot function!)
+    _rebootReasonList[_rebootReasonList[REBOOT_LIST_SZ]] = RM_HARD_RESET;
+    // Update PROM
+    CFMgr_setElement(CFG_UTIL_KEY_REBOOTREASON, &_rebootReasonList, REBOOT_LIST_SZ+1);
+
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_ASSERTCALLERFN, &_assertCallerFn, 4);
+
+    // fixup reason string
     _resetReason[0] = '0'+((_appReasonCode / 10)%10);
     _resetReason[1] = '0'+(_appReasonCode % 10);
     // From hal
     _resetReason[3] = '0'+(hal_reset_cause() %10);
-
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_ASSERTCALLERLOC, &_assertCallerLoc, 4);
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_ASSERTCALLERFN, &_assertCallerFn, 4);
 
     // Create task to tickle watchdog from default task
     os_task_init(&_watchdog_task_str, "watchdog", &watchdog_task, NULL, WATCHDOG_TASK_PRIO,
@@ -65,15 +84,16 @@ void reboot_init(void) {
 
 void RMMgr_reboot(uint8_t reason) {
     // Store reason in PROM
-    CFMgr_setElement(CFG_UTIL_KEY_REBOOTREASON, &reason, 1);
+    _rebootReasonList[_rebootReasonList[REBOOT_LIST_SZ]] = reason;
+    // Update PROM
+    CFMgr_setElement(CFG_UTIL_KEY_REBOOTREASON, &_rebootReasonList, REBOOT_LIST_SZ+1);
 
     // store fn tracker buffer in PROM/FLASH
+    CFMgr_setElement(CFG_UTIL_KEY_FN_LIST, &_fnList, FN_LIST_SZ+1);
 
-    // store stack trace in prom..
     hal_system_reset();
 }
 const char* RMMgr_getResetReason() {
-    // Recovered from PROM at boot time
     return _resetReason;
 }
 uint16_t RMMgr_getResetReasonCode() {
@@ -81,7 +101,9 @@ uint16_t RMMgr_getResetReasonCode() {
     return _appReasonCode + (hal_reset_cause() << 8);
 }
 
-// TODO want a last N reboot reasons list 
+bool RMMgr_wasHardReset() {
+    return (_appReasonCode == RM_HARD_RESET);
+}
 
 void RMMgr_saveAssertCaller(void* fnaddr) {
     _assertCallerFn = fnaddr;
@@ -90,6 +112,15 @@ void RMMgr_saveAssertCaller(void* fnaddr) {
 }
 void* RMMgr_getLastAssertCallerFn() {
     return _assertCallerFn;
+}
+
+// Log passage in a fn by recording its address for later analysis
+void log_fn_fn() {
+    void* caller = __builtin_extract_return_addr(__builtin_return_address(0));
+    // add to PROM based circular list along with timestamp
+    *((uint32_t*)&_fnList[_fnList[FN_LIST_SZ]]) = TMMgr_getRelTime();
+    *((uint32_t*)&_fnList[_fnList[FN_LIST_SZ]+4]) = (uint32_t)caller;
+    _fnList[FN_LIST_SZ] = ((_fnList[FN_LIST_SZ]+8) % FN_LIST_SZ);
 }
 
 static void watchdog_task(void* arg) {
