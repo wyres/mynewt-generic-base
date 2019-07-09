@@ -21,6 +21,8 @@ extern "C" {
 
 const char* RMMgr_getResetReason();
 uint16_t RMMgr_getResetReasonCode();
+// get list of last 'sz' entries from the reboot reason list, with latest first.
+void RMMgr_getResetReasonBuffer(uint8_t* buf, uint8_t sz);
 void RMMgr_reboot(uint8_t reason);
 void RMMgr_saveAssertCaller(void* fnaddr);
 uint32_t RMMgr_getLastAssertCallerLoc();

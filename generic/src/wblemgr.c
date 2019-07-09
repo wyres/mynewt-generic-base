@@ -98,13 +98,6 @@ static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
             // initialise comms to the ble via the uart like comms device defined in syscfg
             ctx->cnx = wskt_open(ctx->uartDevice, &ctx->myUARTEvent, &ctx->myEQ);
             assert(ctx->cnx!=NULL);
-            // Power up using power pin
-            if (ctx->pwrPin>=0) {
-                log_debug("ble power ON using pin %d", ctx->pwrPin);
-                GPIO_write(ctx->pwrPin, 0);     // yup pull down for ON
-            } else {
-                log_debug("ble poweralways on?");
-            }
             // Select it as UART device (if required)
             if (ctx->uartSelect>=0) {
                 uart_select(ctx->uartSelect);
@@ -115,6 +108,13 @@ static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
                 .param = MYNEWT_VAL(BLE_UART_BAUDRATE),
             };
             wskt_ioctl(ctx->cnx, &cmd);
+            // Power up using power pin?
+            if (ctx->pwrPin<0) {
+                log_debug("ble power always on?");
+                return MS_BLE_WAIT_TYPE;        // no need to wait for poweron
+            }
+            log_debug("ble power ON using pin %d", ctx->pwrPin);
+            GPIO_write(ctx->pwrPin, 0);     // yup pull down for ON
             return MS_BLE_WAITPOWERON;
         }
 
@@ -125,7 +125,7 @@ static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-// Wait 500ms or for a READY for module to get its act together
+// Wait 500ms or for a "READY" for module to get its act together
 static SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
@@ -375,7 +375,7 @@ static SM_STATE_ID_t State_IBeacon(void* arg, int e, void* data) {
 static SM_STATE_t _bleSM[MS_BLE_LAST] = {
     {.id=MS_BLE_OFF,        .name="BleOff",       .fn=State_Off},
     {.id=MS_BLE_WAITPOWERON,.name="BleWaitPower", .fn=State_WaitPoweron},
-    {.id=MS_BLE_WAIT_TYPE,.name="BleWaitPower", .fn=State_WaitTypeSet},
+    {.id=MS_BLE_WAIT_TYPE,  .name="BleWaitType", .fn=State_WaitTypeSet},
     {.id=MS_BLE_STARTING,   .name="BleStarting",  .fn=State_Starting},    
     {.id=MS_BLE_ON,         .name="BleOnIdle", .fn=State_On},
     {.id=MS_BLE_SCANNING,   .name="BleScanning", .fn=State_Scanning},    

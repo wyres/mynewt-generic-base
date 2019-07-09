@@ -100,6 +100,11 @@ uint16_t RMMgr_getResetReasonCode() {
     // Recovered from PROM at boot time
     return _appReasonCode + (hal_reset_cause() << 8);
 }
+void RMMgr_getResetReasonBuffer(uint8_t* buf, uint8_t sz) {
+    for(int i=0; i<sz; i++) {
+        buf[i] = _rebootReasonList[(_rebootReasonList[REBOOT_LIST_SZ]-(i+1) + REBOOT_LIST_SZ) % REBOOT_LIST_SZ];
+    }
+}
 
 bool RMMgr_wasHardReset() {
     return (_appReasonCode == RM_HARD_RESET);

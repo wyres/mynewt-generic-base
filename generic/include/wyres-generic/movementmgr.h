@@ -22,21 +22,26 @@ extern "C" {
 typedef enum { UPRIGHT, INVERTED, FLAT_BACK, FLAT_FACE, UNKNOWN} MM_ORIENT;
 typedef void (*MM_CBFN_t)(void);
 
-bool MMMgr_register(MM_CBFN_t cb);
-uint8_t MMMgr_getMovedMask();
+// Register a callback for when movement detected
+bool MMMgr_registerMovementCB(MM_CBFN_t cb);
+// Last time a "movement" was detected
 uint32_t MMMgr_getLastMovedTime();
 bool MMMgr_hasMovedSince(uint32_t reltime);
-uint8_t MMMgr_getFallMask();
+// Last time free fall detected
 uint32_t MMMgr_getLastFallTime();
 bool MMMgr_hasFallenSince(uint32_t reltime);
-uint8_t MMMgr_getShockMask();
+// Last time got a shock (>2G)
 uint32_t MMMgr_getLastShockTime();
 bool MMMgr_hasShockedSince(uint32_t reltime);
+// Register a callback for when orientation change detected
+bool MMMgr_registerOrientationCB(MM_CBFN_t cb);
+// Last time orientation changed to new value
+uint32_t MMMgr_getLastOrientTime();
 MM_ORIENT MMMgr_getOrientation();
 // in units of G/10
-int8_t MMMgr_getX();
-int8_t MMMgr_getY();
-int8_t MMMgr_getZ();
+int8_t MMMgr_getXdG();
+int8_t MMMgr_getYdG();
+int8_t MMMgr_getZdG();
 
 #ifdef __cplusplus
 }

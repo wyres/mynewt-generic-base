@@ -19,14 +19,43 @@
 extern "C" {
 #endif
 
+// Generic callback to signal something changed (what depends on registration!)
+typedef void (*SR_CBFN_t)(void);
 
 void SRMgr_start();
 void SRMgr_stop();
-uint32_t SRMgr_getTemp();
-uint32_t SRMgr_getPressure();
-uint32_t SRMgr_getBattery();
-uint32_t SRMgr_getLight();
-uint32_t SRMgr_getButtonMask();
+
+uint32_t SRMgr_getLastButtonTime();
+// Register callback to be notified when button changes state (also means button is active during deep sleep)
+bool SRMgr_registerButtonCB(SR_CBFN_t cb);
+// Remove registration - if noone is registered then button state only checked at UL time..
+void SRMgr_unregisterButtonCB(SR_CBFN_t cb);
+
+uint32_t SRMgr_getLastNoiseTime();
+uint8_t SRMgr_getNoiseFreqkHz();
+uint8_t SRMgr_getNoiseLeveldB();
+// Register callback to be notified when noise is detected (also means micro is active during deep sleep)
+bool SRMgr_registerNoiseCB(SR_CBFN_t cb);
+// Remove registration - if noone is registered then micro input only checked at UL time..
+void SRMgr_unregisterNoiseCB(SR_CBFN_t cb);
+
+// When did temp, pressure, battery, light last change 'significantly'?
+uint32_t SRMgr_getLastEnvChangeTime();
+int16_t SRMgr_getTempdC();
+uint32_t SRMgr_getPressurePa();
+uint16_t SRMgr_getBatterymV();
+uint8_t SRMgr_getLight();
+uint16_t SRMgr_getADC1mV();
+uint16_t SRMgr_getADC2mV();
+uint8_t SRMgr_getButton();
+bool SRMgr_hasButtonChanged();
+bool SRMgr_hasTempChanged();
+bool SRMgr_hasPressureChanged();
+bool SRMgr_hasBattChanged();
+bool SRMgr_hasLightChanged();
+bool SRMgr_hasADC1Changed();
+bool SRMgr_hasADC2Changed();
+bool SRMgr_updateEnvs();
 
 #ifdef __cplusplus
 }
