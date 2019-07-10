@@ -270,6 +270,8 @@ static void config() {
     }
     // Note the ADC ones will work but return 0 on read if ADC not enabled
     if (LIGHT_SENSOR>=0) {
+        // Must activate GPIO that provides power to it
+        GPIO_define_out("micropower", SENSOR_PWR, 1, LP_DOZE);
         GPIO_define_adc("light", LIGHT_SENSOR, LIGHT_SENSOR_ADCCHAN, LP_DOZE);
         log_debug("S adc-light");
     }
@@ -323,6 +325,7 @@ static void deconfig() {
     }
     if (LIGHT_SENSOR>=0) {
         GPIO_release(LIGHT_SENSOR);
+        GPIO_release(SENSOR_PWR);
     }
     if (GPIO_ADC1>=0) {
         GPIO_release(GPIO_ADC1);

@@ -30,9 +30,6 @@
 
 #define MAX_GPIOS (MYNEWT_VAL(MAX_GPIOS))
 
-// always using adc0
-#define ADC_ID  (0)
-
 typedef struct gpio {
     int8_t pin;
     GPIO_TYPE type;
@@ -116,7 +113,7 @@ void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE offmod
         p->lpEnabled = true;        // assume pin is alive in current lp mode!
         p->adc_chan = adc_chan;
         init_hal(p);
-        p->value = hal_bsp_adc_readmV(ADC_ID, adc_chan);
+        p->value = hal_bsp_adc_readmV(adc_chan);
     }
     return p;
 
@@ -197,7 +194,7 @@ int GPIO_readADCmV(int8_t pin) {
     // It is allowed to read an output pin...
     if (p->lpEnabled) {
         // Read value. Note we don't use the pin, but the adc channel
-        p->value =hal_bsp_adc_readmV(ADC_ID, p->adc_chan);
+        p->value =hal_bsp_adc_readmV(p->adc_chan);
     }
     return p->value;
 }
@@ -270,7 +267,7 @@ static void checkForNoADC() {
     // release mutex
     os_mutex_release(&_gpiomutex);
     // and got here so deinit adc subsystem
-    hal_bsp_adc_deinit(0);
+    hal_bsp_adc_deinit();
 }
 
 // setup pin in hal (at init or when coming back from low power)
@@ -296,8 +293,8 @@ static void init_hal(GPIO* p) {
             }
             case GPIO_ADC: {
                 // Setup ADC for simple polling use if not already done (can be called multiple times without issues)
-                hal_bsp_adc_init(ADC_ID);
-                hal_bsp_adc_define(ADC_ID, p->pin, p->adc_chan);
+                hal_bsp_adc_init();
+                hal_bsp_adc_define(p->pin, p->adc_chan);
                 break;
             }
             default: {
@@ -318,7 +315,7 @@ static void deinit_hal(GPIO* p) {
             }
             hal_gpio_irq_release(p->pin);
         } else if (p->type==GPIO_ADC) {
-            hal_bsp_adc_release(ADC_ID, p->adc_chan);
+            hal_bsp_adc_release(p->pin, p->adc_chan);
             checkForNoADC();
         }
         // and deinit will set it to floating for lowest power use
