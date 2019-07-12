@@ -40,5 +40,5 @@ pkg.init:
     uart_selector_init : 104
     uart_line_comm_init : 105
 #    movement_init : 106
+    SRMgr_init: 107
     init_sm_exec : 110
-

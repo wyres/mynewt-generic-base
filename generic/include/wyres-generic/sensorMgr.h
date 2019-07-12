@@ -21,6 +21,8 @@ extern "C" {
 
 // Generic callback to signal something changed (what depends on registration!)
 typedef void (*SR_CBFN_t)(void);
+typedef enum { SR_BUTTON_RELEASED=0, SR_BUTTON_PRESSED=1} SR_BUTTON_STATE_t;
+typedef enum { SR_BUTTON_SHORT, SR_BUTTON_MED, SR_BUTTON_LONG, SR_BUTTON_VLONG } SR_BUTTON_PRESS_TYPE_t;
 
 void SRMgr_start();
 void SRMgr_stop();
@@ -49,6 +51,9 @@ uint16_t SRMgr_getADC1mV();
 uint16_t SRMgr_getADC2mV();
 uint8_t SRMgr_getButton();
 bool SRMgr_hasButtonChanged();
+uint8_t SRMgr_getLastButtonPressType();
+uint32_t SRMgr_getLastButtonPressTS();
+uint32_t SRMgr_getLastButtonReleaseTS();
 bool SRMgr_hasTempChanged();
 bool SRMgr_hasPressureChanged();
 bool SRMgr_hasBattChanged();
