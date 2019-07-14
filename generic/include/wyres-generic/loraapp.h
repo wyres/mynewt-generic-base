@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-typedef enum { LORA_TX_OK, LORA_TX_OK_ACKD, LORA_TX_TIMEOUT, LORA_TX_ERR_RETRY, LORA_TX_ERR_NOTJOIN, LORA_TX_ERR_FATAL } LORA_TX_RESULT_t;
+typedef enum { LORA_TX_OK, LORA_TX_OK_ACKD, LORA_TX_TIMEOUT, LORA_TX_ERR_RETRY, LORA_TX_ERR_NOTJOIN, LORA_TX_ERR_FATAL, LORA_TX_NO_TX } LORA_TX_RESULT_t;
 typedef void (*LORA_RES_CB_FN_t)(LORA_TX_RESULT_t e);
 typedef void (*LORA_RX_CB_FN_t)(uint8_t port, void* data, uint8_t sz);
 
