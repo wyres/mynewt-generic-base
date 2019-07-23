@@ -23,6 +23,7 @@
 
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/wskt_user.h"
+#include "wyres-generic/uartLineMgr.h"
 #include "wyres-generic/uartSelector.h"
 #include "wyres-generic/rebootMgr.h"
 #include "wyres-generic/timemgr.h"
@@ -217,4 +218,25 @@ bool unittest(const char* tn, bool res) {
         log_warn("Unittest[%s] failed", tn);
     }
     return res;
+}
+
+// Called from sysinit once uarts etc are up
+void log_init(void) {
+    bool res = true;
+    // no console
+#if MYNEWT_VAL(CONSOLE_UART) 
+    log_init_console(true);
+#else
+    log_init_console(false);
+#endif
+    // If logging to a uart is required, tell logging system
+#if (MYNEWT_VAL(LOG_UART_ENABLED))
+    // If specific device for logging, create its wskt driver driver
+    res=uart_line_comm_create(MYNEWT_VAL(LOG_UART), MYNEWT_VAL(LOG_UART_BAUDRATE));
+    assert(res);
+    // And tell logging to use it
+    log_init_uart(MYNEWT_VAL(LOG_UART), MYNEWT_VAL(LOG_UART_BAUDRATE), MYNEWT_VAL(LOG_UART_SELECT));  
+#endif
+//    log_init_dbg(0);      // dont do blocking tx please
+    assert(res);
 }

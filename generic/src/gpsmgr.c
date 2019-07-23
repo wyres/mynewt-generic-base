@@ -386,7 +386,32 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
             return true;
         }
         case MINMEA_INVALID: {
+            log_debug("bad");
             return false;
+        }
+        case MINMEA_SENTENCE_GLL: {
+            log_debug("GLL");
+            return true;
+        }
+        case MINMEA_SENTENCE_GSA: {
+            log_debug("GSA");
+            return true;
+        }
+        case MINMEA_SENTENCE_GST: {
+            log_debug("GST");
+            return true;
+        }
+        case MINMEA_SENTENCE_GSV: {
+            log_debug("GSV");
+            return true;
+        }
+        case MINMEA_SENTENCE_VTG: {
+            log_debug("VTG");
+            return true;
+        }
+        case MINMEA_SENTENCE_ZDA: {
+            log_debug("ZDA");
+            return true;
         }
         case MINMEA_SENTENCE_RMC: {
             struct minmea_sentence_rmc rmcdata;
@@ -404,9 +429,11 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
             return true;
         }
         default: {
-            // ignore, but not an error
+            // unknown, ignore, but not an error
             nd->prec = 0;
-            log_debug("gps[%d][%c%c%c%c%c%c]", si, line[0],line[1],line[2],line[3],line[4],line[5]);
+            log_debug("gps[%d][%s]", si,  line);
+//            log_debug("gps[%d][%c%c%c%c%c%c%c%c]", si, 
+//                line[0],line[1],line[2],line[3],line[4],line[5],line[6],line[7]);
             return true;
         }
     }

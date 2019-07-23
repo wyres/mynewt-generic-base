@@ -22,6 +22,8 @@ extern "C" {
 typedef enum { UPRIGHT, INVERTED, FLAT_BACK, FLAT_FACE, UNKNOWN} MM_ORIENT;
 typedef void (*MM_CBFN_t)(void);
 
+// Refresh values
+void MMMgr_check();
 // Register a callback for when movement detected
 bool MMMgr_registerMovementCB(MM_CBFN_t cb);
 // Last time a "movement" was detected

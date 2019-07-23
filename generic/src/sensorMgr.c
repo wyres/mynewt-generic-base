@@ -378,6 +378,8 @@ static void deconfig() {
     if (BATTERY_GPIO>=0) {
         GPIO_release(BATTERY_GPIO);
     }
+    // accelero power state controlled by MovementMgr, no need for us to tell him
+
     // config alti on i2c
     // TODO
     // config noise detector on micro

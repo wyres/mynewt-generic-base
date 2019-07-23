@@ -22,15 +22,15 @@
 #include "wyres-generic/wutils.h"
 
 #include "wyres-generic/movementmgr.h"
+#include "wyres-generic/timemgr.h"
+#include "wyres-generic/acc_basic.h"
 
-// Timeout for I2C accesses in 'ticks'
-#define I2C_ACCESS_TIMEOUT (100)
 
 #define MAX_MMCBFNS MYNEWT_VAL(MAX_MMCBFNS)
 
+static void callMovedCBs();
+static void checkOrientationChange();
 
-// I2C config
-// Would be nice if it was a bus node defined in bsp for us... and we could just open it...
 static struct {
     // Registered callbacks fns
     MM_CBFN_t movecbs[MAX_MMCBFNS];        // TODO should be a mempool
@@ -44,17 +44,23 @@ static struct {
     uint32_t lastShockTime;
     uint32_t lastOrientTime;
     bool movedSinceLastCheck;
+    MM_ORIENT orientation;
 } _ctx;
 
 void movement_init(void) {
     // clear context
     memset(&_ctx, 0, sizeof(_ctx));
-    // check accelero exists
-    int rc = hal_i2c_master_probe(ACCELERO_I2C_CHAN, ACCELERO_I2C_ADDR, I2C_ACCESS_TIMEOUT);
-    assert(rc==0);
-    // setup accelero for our usage
+    _ctx.orientation = UNKNOWN;
+    // check accelero sensor exists and configure it
+    if (!ACC_init()) {
+        log_debug("accelero hw init fails");
+        assert(0);
+    }
 
     // start timer for checks? or register with a "callmeWhenAwakeANyway" service?
+
+    // register with LP mgr to get called on changes, to deinit/init the I2C
+    // TODO
 }
 
 bool MMMgr_registerMovementCB(MM_CBFN_t cb) {
@@ -77,21 +83,20 @@ bool MMMgr_registerOrientationCB(MM_CBFN_t cb) {
 }
 // poll accelero for x,y,z,moved,fall,shock
 void MMMgr_check() {
-    // TODO
-    uint8_t buff[10];
-    // This could be ioctls sent to a wskt like device.. or a mynewt sensor... or something
-    struct hal_i2c_master_data mdata = {
-        .address = ACCELERO_I2C_ADDR,
-        .buffer = buff,
-        .len = 10,
-    };
-    int rc = hal_i2c_master_read(ACCELERO_I2C_CHAN, &mdata, I2C_ACCESS_TIMEOUT, 1);
-    if (rc==0) {
-    } else {
-        log_warn("i2c access to accelero fails:%d", rc);
+    ACC_activate();
+    ACC_readXYZ(&_ctx.x, &_ctx.y, &_ctx.z);
+    if (ACC_HasDetectedMoved()) {
+        _ctx.movedSinceLastCheck = true;
+        _ctx.lastMoveTime = TMMgr_getRelTime();
+        callMovedCBs();
     }
-    _ctx.movedSinceLastCheck = true;
+    if (ACC_HasDetectedFalling()) {
+        _ctx.lastFallTime = TMMgr_getRelTime();
+    }
+    ACC_sleep();
+    checkOrientationChange();
 }
+
 uint32_t MMMgr_getLastMovedTime() {
     return _ctx.lastMoveTime;
 }
@@ -139,4 +144,24 @@ int8_t MMMgr_getYdG() {
 }
 int8_t MMMgr_getZdG() {
     return _ctx.z;
+}
+
+// internals
+static void callMovedCBs() {
+    for(int i=0;i<MAX_MMCBFNS;i++) {
+        if (_ctx.movecbs[i]!=NULL) {
+            (*_ctx.movecbs[i])();
+        }
+    }
+}
+static void checkOrientationChange() {
+    if (MMMgr_getOrientation() != _ctx.orientation) {
+        _ctx.lastOrientTime = TMMgr_getRelTime();
+        _ctx.orientation = MMMgr_getOrientation();
+        for(int i=0;i<MAX_MMCBFNS;i++) {
+            if (_ctx.orientcbs[i]!=NULL) {
+                (*_ctx.orientcbs[i])();
+            }
+        }
+    }
 }
