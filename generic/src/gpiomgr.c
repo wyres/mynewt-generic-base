@@ -335,8 +335,11 @@ static void onLPModeChange(LP_MODE current, LP_MODE next) {
                 _gpios[i].lpEnabled = false;
             } else {
                 // confgure all pins that are on in this mode (including irq enable)
-                _gpios[i].lpEnabled = true;
-                init_hal(&_gpios[i]);
+                // but only if wans't already enabled
+                if (_gpios[i].lpEnabled==false) {
+                    _gpios[i].lpEnabled = true;
+                    init_hal(&_gpios[i]);
+                }
             }
         }
     }
