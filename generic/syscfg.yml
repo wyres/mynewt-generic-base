@@ -87,5 +87,5 @@ syscfg.defs:
 syscfg.vals:
     # hook reboot and assert operations in mynewt OS
 #    HAL_SYSTEM_RESET_CB: wreboot_cb
-#    OS_ASSERT_CB: wassert_fn_cb
+#    OS_ASSERT_CB: 1
 #    OS_ASSERT_FN_NAME: wassert_fn_cb

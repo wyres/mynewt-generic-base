@@ -29,6 +29,12 @@ void circ_bbuf_init(circ_bbuf_t *c, uint8_t* b, int sz) {
     c->maxlen = sz;
 }
 
+// discard all data
+void circ_bbuf_flush(circ_bbuf_t *c) {
+    c->head=0;
+    c->tail=0;
+}
+
 int circ_bbuf_push(circ_bbuf_t *c, uint8_t data)
 {
     int next;
@@ -72,6 +78,14 @@ int circ_bbuf_free_space(circ_bbuf_t *c)
     return freeSpace - 1; // -1 to account for the always-empty slot.
 }
 
+int circ_bbuf_data_available(circ_bbuf_t *c)
+{
+    int used = c->head - c->tail;
+    if (used<0) {
+        used += c->maxlen;
+    }
+    return used;
+}
 #ifdef C_UTILS_TESTING
 /* To test this module,
  * $ gcc -Wall -DC_UTILS_TESTING circular-byte-buffer.c

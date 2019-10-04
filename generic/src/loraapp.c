@@ -338,6 +338,7 @@ static uint8_t _txBuffer[255]={0};
 LORA_TX_RESULT_t lora_app_tx(uint8_t* data, uint8_t sz, uint32_t timeoutMs) {
     assert(_sock_tx>0);        // no txing if you didnt init for it
     if (!_canTx) {
+        // Tx in progress, retry later please
         return LORA_TX_ERR_RETRY;
     }
     _loraCfg.txTimeoutMs = timeoutMs;
@@ -365,19 +366,20 @@ LORA_TX_RESULT_t lora_app_tx(uint8_t* data, uint8_t sz, uint32_t timeoutMs) {
             return LORA_TX_ERR_FATAL;       // best you reset mate
         }
     }
+    assert(0);      // unreachable
 }
 
 static void loraapp_task(void* data) {
     while(1) {
         if (_sock_tx>0) {
-            // TODO should have sema to stop app trying a tx before we're ready to go back to listen for tx result...
-            // but without blocking the tx caller.... just a flag?
+            // sema to stop app trying a tx before we're ready to go back to listen for tx result...
+            // but without blocking the tx caller.... its just a flag... This whole api needs rejigging to be properly async
             _canTx = true;
             // Wait till we tx something
             os_sem_pend(&_lora_tx_sem, OS_TIMEOUT_NEVER);
+            // note sema is now taken (==0), so next time round will block until a tx call adds a token - which it can only do when canTx=true...
             _canTx = false;
             lorawan_event_t txev = lorawan_wait_ev(_sock_tx, (LORAWAN_EVENT_ACK|LORAWAN_EVENT_ERROR|LORAWAN_EVENT_SENT), _loraCfg.txTimeoutMs);
-            // note sema is now taken (==0), so next time round will block until a tx call adds a token
             assert(_txcbfn!=NULL);      // must have a cb fn if we created the socket...
             if (txev & LORAWAN_EVENT_ACK) {
                 log_debug("tx ev OK ACK");
@@ -411,7 +413,7 @@ static void loraapp_task(void* data) {
             uint8_t port;
             uint8_t payload[256];
             assert(_rxcbfn!=NULL);      // Must have cb fn if created socket
-            // Wait 10s as gotta wait for RX2 delay (up to 7s) + SF12 (2s)
+            // Wait in theory for 18s as gotta wait for RX2 delay (up to 16s) + SF12 (2s)
             uint8_t rxsz = lorawan_recv(_sock_rx, &devAddr, &port, payload, 255, 9000);
             log_debug("lora rx says got [%d] bytes", rxsz);
             if (rxsz>0) {

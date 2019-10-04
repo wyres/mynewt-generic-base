@@ -70,7 +70,10 @@ void wassert_fn_cb(const char* file, int lnum, const char *func, const char *e) 
     wassert_fn(file, lnum);
 }
 
-/*
+void os_assert_cb() {
+    wassert_fn(NULL, 0);
+}
+/* can't do this... this is defined in mynewt kernel/os/src/arch/cortex_m3/os_fault.c
 void __assert_func(const char *file, int line, const char *func, const char *e) {
     wassert_fn(NULL,line);
     // actually wassert_fn never returns
@@ -83,6 +86,13 @@ void wreboot_cb(void) {
 }
 
 #define MAX_LOGSZ 256
+    // Default log level depending on build (can be changed by app)
+#ifdef NDEBUG
+static uint8_t _logLevel = LOGS_RUN;
+#else /* NDEBUG */
+static uint8_t _logLevel = LOGS_DEBUG;
+#endif /* NDEBUG */
+
 // Must be static buffer NOT ON STACK
 static char _buf[MAX_LOGSZ];
 static char _noutbuf[MAX_LOGSZ];        // for nout log
@@ -98,6 +108,7 @@ static void do_log(char lev, const char* ls, va_list vl) {
     // protect here with a mutex?
     _buf[0]=lev;
     _buf[1]=':';
+    // need timestamp
     vsprintf(_buf+2, ls, vl);
     int len = strnlen(_buf, MAX_LOGSZ);
     if ((len+3)>=MAX_LOGSZ) {
@@ -131,6 +142,10 @@ static void do_log(char lev, const char* ls, va_list vl) {
            log_noout_fn("log write FAIL");      // just for debugger to watch
        }
    }
+}
+
+void log_level(uint8_t l) {
+    _logLevel = l;
 }
 
 void log_init_console(bool enable) {
@@ -171,22 +186,36 @@ int log_init_uart(const char* dev, uint32_t baud, int8_t uartSelect) {
 }
 
 void log_debug_fn(const char* ls, ...) {
-    va_list vl;
-    va_start(vl, ls);
-    do_log('D', ls, vl);
-    va_end(vl);
+    if (_logLevel<=LOGS_DEBUG) {
+        va_list vl;
+        va_start(vl, ls);
+        do_log('D', ls, vl);
+        va_end(vl);
+    }
+}
+void log_info_fn(const char* ls, ...) {
+    if (_logLevel<=LOGS_INFO) {
+        va_list vl;
+        va_start(vl, ls);
+        do_log('I', ls, vl);
+        va_end(vl);
+    }
 }
 void log_warn_fn(const char* ls, ...) {
-    va_list vl;
-    va_start(vl, ls);
-    do_log('W', ls, vl);
-    va_end(vl);
+    if (_logLevel<=LOGS_RUN) {
+        va_list vl;
+        va_start(vl, ls);
+        do_log('W', ls, vl);
+        va_end(vl);
+    }
 }
 void log_error_fn(const char* ls, ...) {
-    va_list vl;
-    va_start(vl, ls);
-    do_log('E', ls, vl);
-    va_end(vl);
+    if (_logLevel<=LOGS_RUN) {
+        va_list vl;
+        va_start(vl, ls);
+        do_log('E', ls, vl);
+        va_end(vl);
+    }
 }
 void log_noout_fn(const char* ls, ...) {
     va_list vl;

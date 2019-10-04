@@ -25,9 +25,13 @@ typedef void (*CFG_CBFN_t)(uint16_t key);
 bool CFMgr_registerCB(CFG_CBFN_t cb);
 bool CFMgr_addElementDef(uint16_t key, uint8_t len, void* initdata);
 bool CFMgr_getOrAddElement(uint16_t key, void* data, uint8_t len);
+// get an element value, returning its length, into a buffer of size maxlen
+// returns -1 if key not found
+int CFMgr_getElement(uint16_t key, void* data, uint8_t maxlen);
 uint8_t CFMgr_getElementLen(uint16_t key);
 bool CFMgr_setElement(uint16_t key, void* data, uint8_t len);
 bool CFMgr_resetElement(uint16_t key);
+void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb);
 
 // Define module ids here as unique values 1-255. Module 0 is for basic untilites (who can manage their keys between them..)
 // NEVER REDEFINE A VALUE UNLESS OK TO CLEAR DEVICE CONFIG AFTER UPGRADE

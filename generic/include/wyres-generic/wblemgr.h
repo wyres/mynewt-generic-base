@@ -21,7 +21,7 @@ extern "C" {
 
 typedef enum { WBLE_COMM_OK, WBLE_COMM_FAIL, WBLE_SCAN_RX_IB, WBLE_IB_CONN, WBLE_IB_DISC } WBLE_EVENT_t;
 typedef struct ibeacon_data {
-    uint8_t uuid[16];
+//    uint8_t uuid[16];     // Not currently available or useful
     uint16_t major;
     uint16_t minor;
     int8_t rssi;
@@ -29,22 +29,24 @@ typedef struct ibeacon_data {
 } ibeacon_data_t;
 typedef void (*WBLE_CB_FN_t)(WBLE_EVENT_t e, ibeacon_data_t* b);
 
-void wble_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect);
+void* wble_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect);
 
 // start connection
-void wble_start(WBLE_CB_FN_t cb);
+void wble_start(void* ctx, WBLE_CB_FN_t cb);
 // Stop operation
-void wble_stop();
+void wble_stop(void* ctx);
 // Ask for ibeacon scanning to start, giving callback for data as received
-void wble_scan_start(const char* uuid);
-void wble_scan_stop();
+void wble_scan_start(void* ctx, const uint8_t* uuid, uint16_t majorStart, uint16_t majorEnd);
+void wble_scan_stop(void* ctx);
 // configure ibeacon operation (when not scanning)
-void wble_ibeacon_start(const char* uuid, uint16_t maj, uint16_t min, uint8_t extra);
-void wble_ibeacon_stop();
+void wble_ibeacon_start(void* ctx, const uint8_t* uuid, uint16_t maj, uint16_t min, uint8_t extra);
+void wble_ibeacon_stop(void* ctx);
+// get number of ibs we have seen so far
+int wble_getNbIB(void* ctx);
 // get the list of IBs (best to do this once stopped)
-ibeacon_data_t* wble_getIBList(uint8_t* sz);
+ibeacon_data_t* wble_getIBList(void* ctx, int* sz);
 // copy out sorted list of beacons up to sz elements into caller provided list
-uint8_t wble_getSortedIBList(uint8_t sz, ibeacon_data_t* list);
+int wble_getSortedIBList(void* ctx, int sz, ibeacon_data_t* list);
 #ifdef __cplusplus
 }
 #endif

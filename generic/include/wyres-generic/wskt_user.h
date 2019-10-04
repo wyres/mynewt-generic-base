@@ -24,14 +24,18 @@ extern "C" {
 #endif
 
 // APP API : access devices via socket like ops
-// open new socket to a device instance. If NULL rturned then the device is not accessible
-// The evt must have its arg pointing to the correct thing for this device eg a buffer to receive into
+// open new socket to a device instance. If NULL rturned then the device is not accessible : 
+//  - doesnt exist
+// The evt must have its arg pointing to the correct thing for this device eg a buffer to receive into of at least WSKT_BUF_SZ
+// add callback fn for skt state changes?
 wskt_t* wskt_open(const char* device, struct os_event* evt, struct os_eventq* eq);
-// configure specific actions on the device. Conflictual commands from multiple sockets are not advised... as far as possible they will mediated eg power off...
+// configure specific actions on the device. Conflictual commands from multiple sockets are not advised... 
+//  - as far as possible they will mediated eg power off...
 int wskt_ioctl(wskt_t* skt, wskt_ioctl_t* cmd);
 // Send data to the device. This will be interleaved with other open sockets on the same device on a block basis
 int wskt_write(wskt_t* skt, uint8_t* data, uint32_t sz);
 // indicate done using this device. Your skt variable will be set to NULL after to avoid any unpleasentness
+// Any remaining data is flushed out before shutting down the device (if this was the last cnx)
 int wskt_close(wskt_t** skt);
 
 #ifdef __cplusplus

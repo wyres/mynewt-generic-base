@@ -43,6 +43,10 @@ typedef struct {
 
 void circ_bbuf_init(circ_bbuf_t *c, uint8_t* b, int sz);
 
+/* Discard all data from the given buffer
+ */
+void circ_bbuf_flush(circ_bbuf_t *c);
+
 /*
  * Method: circ_buf_pop
  * Returns:
@@ -65,4 +69,8 @@ int circ_bbuf_push(circ_bbuf_t *c, uint8_t data);
  */
 int circ_bbuf_free_space(circ_bbuf_t *c);
 
+/*
+ * returns number of bytes of data available in the buffer
+ */
+int circ_bbuf_data_available(circ_bbuf_t *c);
 #endif /* __CIRCULAR_BYTE_BUFFER_H_ */

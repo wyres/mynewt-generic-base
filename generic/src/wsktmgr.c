@@ -91,6 +91,7 @@ wskt_t* wskt_open(const char* device_name, struct os_event* evt, struct os_event
         // save evt/eq into it
         ret->evt = evt;
         ret->eq = eq;
+            
         // Tell driver to open
         if ((*(WSKT_DEVICE_FNS(ret))->open)(ret)<0) {
             // broken on open, free the socket
@@ -108,10 +109,12 @@ int wskt_ioctl(wskt_t* skt, wskt_ioctl_t* cmd) {
 // Send data to the device. This will be interleaved with other open sockets on the same device on a block basis
 int wskt_write(wskt_t* skt, uint8_t* data, uint32_t sz) {
     assert(skt!=NULL);
+    // Check have write access
     return (*(WSKT_DEVICE_FNS(skt))->write)(skt, data, sz);
 }
+
 // indicate done using this device. Your skt variable will be set to NULL after to avoid any unpleasentness
-int wskt_close(wskt_t** skt) {
+int wskt_close(wskt_t** skt, WSKT_CBFN_t cbfn) {
     assert(skt!=NULL);
     wskt_t*s = *skt;
     assert(s!=NULL);

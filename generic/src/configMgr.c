@@ -106,10 +106,40 @@ bool CFMgr_getOrAddElement(uint16_t key, void* data, uint8_t len) {
         }
     } else {
         // read data
-        ret = hal_bsp_nvmRead(getIdxOff(idx), getIdxLen(idx), (uint8_t*)data);
+        // Check the given buffer length is correct for the key
+        uint8_t klen = getIdxLen(idx);
+        if (klen>len) {
+            // incorrect code?
+            log_noout("CFGGE:WARN CK %4x at idx %d KL %d DL %d", key, idx, klen, len);
+            // continue in case just caller limiting buffer size
+            klen = len;
+        }
+        ret = hal_bsp_nvmRead(getIdxOff(idx), klen, (uint8_t*)data);
     }
     hal_bsp_nvmLock();
     return ret;
+}
+// get a config value into the data buffer, of size maxlen.
+// Returns the actual length of the element returned, or -1 if the key does not exist
+int CFMgr_getElement(uint16_t key, void* data, uint8_t maxlen) {
+    int len = 0;
+    hal_bsp_nvmUnlock();
+    int idx = findKeyIdx(key);
+    if (idx<0) {
+        len = -1;      // no such key
+    } else {
+        // read data
+        len = getIdxLen(idx);
+        // limit to buffer given!
+        if (len>maxlen) {
+            len = maxlen;
+        }
+        if (hal_bsp_nvmRead(getIdxOff(idx), len, (uint8_t*)data)==false) {
+            len = -1;      // fail
+        }
+    }
+    hal_bsp_nvmLock();
+    return len;
 }
 uint8_t CFMgr_getElementLen(uint16_t key) {
     uint8_t ret = 0;
@@ -164,6 +194,24 @@ bool CFMgr_resetElement(uint16_t key) {
     // Tell cfg listeners
     informListeners(key);
     return ret;
+}
+
+// iterate over all keys, calling cb for each.
+// in the CB the other access methods can be called
+void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb) {
+    int key = 0;
+    for(int i=0;i<_cfg.nbKeys; i++) {
+        // get each key, but ensure NVM in state to allow CB to call other methods
+        hal_bsp_nvmUnlock();
+        key = getIdxKey(i);
+        hal_bsp_nvmLock();
+        // if no keymodule filter, or the key has the correct keymodule as its MSB, give it to CB
+        if (keymodule==-1 || (key>>8)==keymodule) {
+            (*(cb))(key);
+        }
+    }
+
+
 }
 
 // Internals

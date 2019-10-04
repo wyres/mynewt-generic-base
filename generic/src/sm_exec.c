@@ -45,9 +45,9 @@ static struct os_task sm_mgr_task_str;
 static SM_t _smTable[SM_MAX_SMS];
 static uint8_t _smIdx = 0;
 
-SM_EVENT_t _sm_event_list[SM_MAX_EVENTS];
-uint8_t _sm_event_list_head=0;
-uint8_t _sm_event_list_tail=0;
+static SM_EVENT_t _sm_event_list[SM_MAX_EVENTS];
+static uint8_t _sm_event_list_head=0;
+static uint8_t _sm_event_list_tail=0;
 
 static struct os_event _sm_schedule_event;
 static struct os_eventq _sm_EQ;
@@ -100,13 +100,16 @@ bool sm_start(SM_ID_t id) {
 
 // PUBLIC : send an event to a state machine (called from ext or int)
 bool sm_sendEvent(SM_ID_t id, int e, void* data) {
+    // TODO mutex protect list accesses
     if (circListFull(_sm_event_list_head, _sm_event_list_tail, SM_MAX_EVENTS)) {
+        log_warn("!!!aie!!!");
         return false;
     }
     uint8_t idx = circListNext(&_sm_event_list_tail, SM_MAX_EVENTS);
     _sm_event_list[idx].sm_id = id;
     _sm_event_list[idx].e = e;
     _sm_event_list[idx].data = data;
+    // Schedule event handler if not already waiting to run (does all SM events on list)
     os_eventq_put(&_sm_EQ, &_sm_schedule_event);
     return true;
 }
@@ -114,13 +117,59 @@ void sm_timer_start(SM_ID_t id, uint32_t tms) {
     SM_t* sm = (SM_t*)id;
     os_time_t ticks;
     os_time_ms_to_ticks(tms, &ticks);
-    // TODO STOP OLD TIMER?
+    // Not required to explicitly stop timer if it was running, reset stops it
     os_callout_reset(&(sm->timer), ticks);
 }
 void sm_timer_stop(SM_ID_t id) {
     SM_t* sm = (SM_t*)id;
-    // TODO REMOVE ANY TIMEOUT EVENTS FOR THIS SM FROM EVENT Q (in case it popped but is now cancelled)
     os_callout_stop(&(sm->timer));
+    uint8_t head = _sm_event_list_head;
+    // REMOVE ANY TIMEOUT EVENTS FOR THIS SM FROM EVENT Q (in case it popped but is now cancelled)
+    // TODO mutex protect list accesses
+    while (!circListEmpty(head, _sm_event_list_tail, SM_MAX_EVENTS)) {
+        // get events 
+        SM_EVENT_t* evt = &_sm_event_list[circListNext(&head, SM_MAX_EVENTS)];
+        // If its a timeout event for this SM, invalidate it
+        if (evt->sm_id==id && evt->e==SM_TIMEOUT) {
+            evt->sm_id = NULL;      // so it gets ignored by sm_nextevent_sb processing
+        }
+    }
+}
+// Start timer for tms ms from now that will send event e to SM id when it pops. If there is already a timer for event e, the
+// timeout is reset to tms ms from now. If the current state of the SM changes, these timers ARE NOT STOPPED.
+void sm_timer_startE(SM_ID_t id, uint32_t tms, int e) {
+    // need a list of individual timers per event value...
+    assert(0);      // NOT YET IMPLEMENTED
+    // TODO have to malloc for this??
+    SM_t* sm = (SM_t*)id;
+    os_time_t ticks;
+    os_time_ms_to_ticks(tms, &ticks);
+    // Not required to explicitly stop timer if it was running, reset stops it
+    os_callout_reset(&(sm->timer), ticks);      // THIS ISNT IT TODO
+}
+// Stop the timer that is sending event e
+void sm_timer_stopE(SM_ID_t id, int e) {
+    assert(0);      // NOT YET IMPLEMENTED
+    SM_t* sm = (SM_t*)id;
+    // find the appropriate timer associated with this event and cancel it
+    os_callout_stop(&(sm->timer));      // This isn't it TODO
+    // find any event in the pending events list with this event and remove it (timer has already popped but not executed)
+    // TODO mutex protect list accesses
+    uint8_t head = _sm_event_list_head;
+    while (!circListEmpty(head, _sm_event_list_tail, SM_MAX_EVENTS)) {
+        // get events 
+        SM_EVENT_t* evt = &_sm_event_list[circListNext(&head, SM_MAX_EVENTS)];
+        // If its a timeout event for this SM, invalidate it
+        if (evt->sm_id==id && evt->e==e) {
+            evt->sm_id = NULL;      // so it gets ignored by sm_nextevent_sb processing
+        }
+    }
+}
+
+// Get current state
+SM_STATE_ID_t sm_getCurrentState(SM_ID_t id) {
+    SM_t* sm = (SM_t*)id;
+    return sm->currentState->id;
 }
 
 // Callouts
@@ -133,29 +182,31 @@ static void sm_nextevent_cb(struct os_event* e) {
     while(!circListEmpty(_sm_event_list_head, _sm_event_list_tail, SM_MAX_EVENTS)) {
         // call SM with event
         SM_EVENT_t* evt = &_sm_event_list[circListNext(&_sm_event_list_head, SM_MAX_EVENTS)];
-        SM_t* sm = (SM_t*)(evt->sm_id);
-        SM_STATE_ID_t nextState = (sm->currentState->fn)(sm->ctxarg, evt->e, evt->data);
-        // Check if change of state
-        if (nextState!=SM_STATE_CURRENT) {
-            // ensure timer is stopped before entering next state
-            sm_timer_stop(sm);
-            SM_STATE_t* next = findStateFromId(nextState, sm->sm_table, sm->sz);
-            if (next==NULL) {
-                // oops
-                log_error("SM tries to change to unknown state[%d] from current [%s] on event [%d]", nextState, sm->currentState->name, evt->e);
-                assert(0);      // stop right here boys
+        if (evt->sm_id!=NULL) {
+            SM_t* sm = (SM_t*)(evt->sm_id);
+            SM_STATE_ID_t nextState = (sm->currentState->fn)(sm->ctxarg, evt->e, evt->data);
+            // Check if change of state
+            if (nextState!=SM_STATE_CURRENT) {
+                // ensure timer is stopped before entering next state
+                sm_timer_stop(sm);
+                SM_STATE_t* next = findStateFromId(nextState, sm->sm_table, sm->sz);
+                if (next==NULL) {
+                    // oops
+                    log_error("SM tries to change to unknown state[%d] from current [%s] on event [%d]", nextState, sm->currentState->name, evt->e);
+                    assert(0);      // stop right here boys
+                }
+                // exit previous - you are NOT allowed to change the destination state 
+                (sm->currentState->fn)(sm->ctxarg, SM_EXIT, NULL);
+                // change to next one
+                sm->currentState = next;
+                // enter next - allowed to change to a new one? no - in this case you can send yourself your own event...
+                (sm->currentState->fn)(sm->ctxarg, SM_ENTER, NULL);
             }
-            // exit previous - you are NOT allowed to change the destination state 
-            (sm->currentState->fn)(sm->ctxarg, SM_EXIT, NULL);
-            // change to next one
-            sm->currentState = next;
-            // enter next - allowed to change to a new one? no - in this case you can send yourself your own event...
-            (sm->currentState->fn)(sm->ctxarg, SM_ENTER, NULL);
-        }
+        } // else this event was cancelled whilest in the q, ignore it
     }
 }
 
-// task just runs the calls into SMs using events
+// task just sends the events on the global list into SMs using event to run the task
 static void sm_mgr_task(void* arg) {
     while(1) {
         os_eventq_run(&_sm_EQ);

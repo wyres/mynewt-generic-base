@@ -19,6 +19,8 @@
 extern "C" {
 #endif
 
+typedef enum { POWER_ONOFF, POWER_ALWAYSON, POWER_ONSTANDBY } GPS_POWERMODE_t;
+
 typedef struct gps_data {
     int32_t lat;
     int32_t lon;
@@ -27,17 +29,18 @@ typedef struct gps_data {
     uint8_t nSats;      // number of satellites used for this fix
     uint32_t rxAt;      // timestamp in ms since boot of when this position was updated
 } gps_data_t;
-typedef enum { GPS_COMM_OK, GPS_COMM_FAIL, GPS_SATOK, GPS_SATLOSS, GPS_NEWFIX } GPS_EVENT_TYPE_t;
+typedef enum { GPS_COMM_OK, GPS_COMM_FAIL, GPS_SATOK, GPS_SATLOSS, GPS_NEWFIX, GPS_DONE } GPS_EVENT_TYPE_t;
 typedef void (*GPS_CB_FN_t)(GPS_EVENT_TYPE_t e);
 
 void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect);
 
+void gps_setPowerMode(GPS_POWERMODE_t m);
 bool gps_getData(gps_data_t* d);
 // Get age of the last fix we got, or -1 if never had a fix
 int32_t gps_lastGPSFixAgeMins();
 
 void gps_start(GPS_CB_FN_t cb, uint32_t tsecs);
-void gps_stop();
+void gps_stop();        // Note, wait for GPS_DONE event before using uart for anything else
 
 #ifdef __cplusplus
 }

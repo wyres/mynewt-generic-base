@@ -71,6 +71,14 @@ bool sm_sendEvent(SM_ID_t id, int e, void* data);
 void sm_timer_start(SM_ID_t id, uint32_t tms);
 // Stop the timer. Note this is automatically done for you when state changes
 void sm_timer_stop(SM_ID_t id);
+// Start timer for tms ms from now that will send event e to SM id when it pops. If there is already a timer for event e, the
+// timeout is reset to tms ms from now. If the current state of the SM changes, these timers ARE NOT STOPPED.
+void sm_timer_startE(SM_ID_t id, uint32_t tms, int e);
+// Stop the timer that is sending event e
+void sm_timer_stopE(SM_ID_t id, int e);
+
+// What state is this machine currently in?
+SM_STATE_ID_t sm_getCurrentState(SM_ID_t id);
 
 #ifdef __cplusplus
 }

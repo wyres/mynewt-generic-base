@@ -64,7 +64,9 @@ void reboot_init(void) {
     // Update PROM
     CFMgr_setElement(CFG_UTIL_KEY_REBOOTREASON, &_rebootReasonList, REBOOT_LIST_SZ+1);
 
+    // Get last assert caller
     CFMgr_getOrAddElement(CFG_UTIL_KEY_ASSERTCALLERFN, &_assertCallerFn, 4);
+    // and reset so we know if reboot due to reset?
 
     // fixup reason string
     _resetReason[0] = '0'+((_appReasonCode / 10)%10);
@@ -98,6 +100,20 @@ const char* RMMgr_getResetReason() {
 }
 uint16_t RMMgr_getResetReasonCode() {
     // Recovered from PROM at boot time
+    // hal reset causes for STM32L1:
+    /*
+    if (reg & RCC_CSR_WWDGRSTF) {
+        reason = HAL_RESET_WATCHDOG;            // 3
+    } else if (reg & RCC_CSR_SFTRSTF) {
+        reason = HAL_RESET_SOFT;                // 4
+    } else if (reg & RCC_CSR_PINRSTF) {
+        reason = HAL_RESET_PIN;                 // 2
+    } else if (reg & RCC_CSR_LPWRRSTF) {
+        // For L1xx this is low-power reset 
+        reason = HAL_RESET_BROWNOUT;            // 5
+    } else {
+        reason = HAL_RESET_POR;                 // 1
+    */
     return _appReasonCode + (hal_reset_cause() << 8);
 }
 void RMMgr_getResetReasonBuffer(uint8_t* buf, uint8_t sz) {
