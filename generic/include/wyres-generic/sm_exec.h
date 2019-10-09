@@ -58,7 +58,7 @@ SM_STATE_t _mySM[MS_LAST] = {
 };
  * Call sm_init() with with this table, its size, and the initial state, and the ctx arg passed to state functions (can be NULL)
  */
-SM_ID_t sm_init(const char* name, SM_STATE_t* stateTable, uint8_t sz, SM_STATE_ID_t initialState, void* ctxarg);
+SM_ID_t sm_init(const char* name, const SM_STATE_t* stateTable, uint8_t sz, SM_STATE_ID_t initialState, void* ctxarg);
 /*
  * To start your state machine do 
 sm_start(id):
@@ -72,7 +72,8 @@ void sm_timer_start(SM_ID_t id, uint32_t tms);
 // Stop the timer. Note this is automatically done for you when state changes
 void sm_timer_stop(SM_ID_t id);
 // Start timer for tms ms from now that will send event e to SM id when it pops. If there is already a timer for event e, the
-// timeout is reset to tms ms from now. If the current state of the SM changes, these timers ARE NOT STOPPED.
+// timeout is reset to tms ms from now. If the current state of the SM changes, these timers ARE NOT STOPPED (to allow cross-state timer)
+// If a timer is already running for this SM with this event, it is reset (stop/start) even if it has already popped but not yet been executed.
 void sm_timer_startE(SM_ID_t id, uint32_t tms, int e);
 // Stop the timer that is sending event e
 void sm_timer_stopE(SM_ID_t id, int e);

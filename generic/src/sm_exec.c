@@ -24,6 +24,8 @@
 #define SM_TASK_STACK_SZ   OS_STACK_ALIGN(512)
 #define SM_MAX_EVENTS      MYNEWT_VAL(SM_MAX_EVENTS)
 #define SM_MAX_SMS         MYNEWT_VAL(SM_MAX_SMS)
+// how many per-event timers can you have?
+#define MAX_PER_EVT_TIMERS MYNEWT_VAL(SM_MAX_EVENT_TIMERS)
 
 // this is the list of events waiting to be executed for all state machines
 typedef struct sm_event {
@@ -32,11 +34,16 @@ typedef struct sm_event {
     void* data;
 } SM_EVENT_t;
 typedef struct {
-    SM_STATE_t* sm_table;
+    const SM_STATE_t* sm_table;
     uint8_t sz;
     void* ctxarg;
-    SM_STATE_t* currentState;
+    const SM_STATE_t* currentState;
     struct os_callout timer;
+    struct sm_evttimers {
+        int e;
+        struct os_callout t;
+        SM_ID_t s;                // must hold our own SM pointer to be able to recover it in the timer cb
+    } evttimers[MAX_PER_EVT_TIMERS];
 } SM_t;
 
 static os_stack_t _sm_task_stack[SM_TASK_STACK_SZ];
@@ -55,12 +62,13 @@ static struct os_eventq _sm_EQ;
 // predeclare privates
 static void sm_mgr_task(void* arg);
 static void sm_timer_cb(struct os_event* ev);
+static void sm_timerE_cb(struct os_event* ev);
 static void sm_nextevent_cb(struct os_event* ev);
 
 static uint8_t circListNext(uint8_t* idx, uint8_t sz);
 static bool circListFull(uint8_t head, uint8_t tail, uint8_t sz);
 static bool circListEmpty(uint8_t head, uint8_t tail, uint8_t sz);
-static SM_STATE_t* findStateFromId(SM_STATE_ID_t id, SM_STATE_t* table, uint8_t sz);
+static const SM_STATE_t* findStateFromId(SM_STATE_ID_t id, const SM_STATE_t* table, uint8_t sz);
 
 // Called from sysinit via reference in pkg.yml
 void init_sm_exec(void) {
@@ -78,7 +86,7 @@ void init_sm_exec(void) {
 }
 
 // PUBLIC : Create an SM and return its reference
-SM_ID_t sm_init(const char* name, SM_STATE_t* states, uint8_t sz, SM_STATE_ID_t initialState, void* ctxarg) {
+SM_ID_t sm_init(const char* name, const SM_STATE_t* states, uint8_t sz, SM_STATE_ID_t initialState, void* ctxarg) {
     // Sanity check the table
     assert(sz>0 && sz<255);
     // alloc a space
@@ -139,20 +147,40 @@ void sm_timer_stop(SM_ID_t id) {
 // timeout is reset to tms ms from now. If the current state of the SM changes, these timers ARE NOT STOPPED.
 void sm_timer_startE(SM_ID_t id, uint32_t tms, int e) {
     // need a list of individual timers per event value...
-    assert(0);      // NOT YET IMPLEMENTED
-    // TODO have to malloc for this??
+    // try to stop it first to get any associated events off list
+    sm_timer_stopE(id, e);
+    // Now start it
     SM_t* sm = (SM_t*)id;
-    os_time_t ticks;
-    os_time_ms_to_ticks(tms, &ticks);
-    // Not required to explicitly stop timer if it was running, reset stops it
-    os_callout_reset(&(sm->timer), ticks);      // THIS ISNT IT TODO
+    // Find an empty timer for this event (shouldn't exist already as the stop removes it...)
+    for(int i=0;i<MAX_PER_EVT_TIMERS;i++) {
+        if (sm->evttimers[i].s==NULL)  {
+            sm->evttimers[i].e = e;
+            sm->evttimers[i].s = id;
+            os_time_t ticks;
+            os_time_ms_to_ticks(tms, &ticks);
+            os_callout_init(&(sm->evttimers[i].t), &_sm_EQ, sm_timerE_cb, &(sm->evttimers[i]));
+            os_callout_reset(&(sm->evttimers[i].t), ticks);      
+            return;
+        }
+    }
+    // oops too many running per-event timers...
+    log_error("SM: per-event timers overflow for sm %x", sm->sm_table);
+    assert(0);
+    return;
 }
 // Stop the timer that is sending event e
 void sm_timer_stopE(SM_ID_t id, int e) {
-    assert(0);      // NOT YET IMPLEMENTED
     SM_t* sm = (SM_t*)id;
     // find the appropriate timer associated with this event and cancel it
-    os_callout_stop(&(sm->timer));      // This isn't it TODO
+    for(int i=0;i<MAX_PER_EVT_TIMERS;i++) {
+        if (sm->evttimers[i].s!=NULL && sm->evttimers[i].e==e) {
+            // gotcha
+            os_callout_stop(&(sm->evttimers[i].t));
+            sm->evttimers[i].s = NULL;      // its gone
+            sm->evttimers[i].e = -1;      // its gone
+        }
+    }
+    // Not an issue if we don't find it...
     // find any event in the pending events list with this event and remove it (timer has already popped but not executed)
     // TODO mutex protect list accesses
     uint8_t head = _sm_event_list_head;
@@ -176,6 +204,16 @@ SM_STATE_ID_t sm_getCurrentState(SM_ID_t id) {
 static void sm_timer_cb(struct os_event* e) {
     sm_sendEvent((SM_ID_t)(e->ev_arg), SM_TIMEOUT, NULL);
 }
+// for case with specific event
+static void sm_timerE_cb(struct os_event* e) {
+    // not the sm id, its the per-event structure
+    struct sm_evttimers* et = (struct sm_evttimers *)(e->ev_arg);
+    // send the event
+    sm_sendEvent(et->s, et->e, NULL);
+    // free the slot
+    et->s = NULL;
+    et->e = -1;
+}
 
 static void sm_nextevent_cb(struct os_event* e) {
     // pop events until empty
@@ -189,7 +227,7 @@ static void sm_nextevent_cb(struct os_event* e) {
             if (nextState!=SM_STATE_CURRENT) {
                 // ensure timer is stopped before entering next state
                 sm_timer_stop(sm);
-                SM_STATE_t* next = findStateFromId(nextState, sm->sm_table, sm->sz);
+                const SM_STATE_t* next = findStateFromId(nextState, sm->sm_table, sm->sz);
                 if (next==NULL) {
                     // oops
                     log_error("SM tries to change to unknown state[%d] from current [%s] on event [%d]", nextState, sm->currentState->name, evt->e);
@@ -213,7 +251,7 @@ static void sm_mgr_task(void* arg) {
     }
 }
 
-static SM_STATE_t* findStateFromId(SM_STATE_ID_t id, SM_STATE_t* table, uint8_t sz) {
+static const SM_STATE_t* findStateFromId(SM_STATE_ID_t id, const SM_STATE_t* table, uint8_t sz) {
     // start search at the 'idth' element iff id<sz, in case table elements are in the enum order... optimisation... TODO
     for(int i=0;i<sz;i++) {
         if (table[i].id==id) {

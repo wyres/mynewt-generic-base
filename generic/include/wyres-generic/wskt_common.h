@@ -43,7 +43,7 @@ typedef struct wskt {
 } wskt_t;
 
 typedef enum { IOCTL_PWRON, IOCTL_PWROFF, IOCTL_RESET, IOCTL_SET_BAUD, IOCTL_FILTERASCII, IOCTL_SETEOL, 
-    IOCTL_SELECTUART, IOCTL_FLUSHTX, IOCTL_CHECKTX } wskt_ioctl_cmd;
+    IOCTL_SELECTUART, IOCTL_FLUSHTXRX, IOCTL_CHECKTX } wskt_ioctl_cmd;
 typedef struct wskt_ioctl {
     wskt_ioctl_cmd cmd;
     uint32_t param;

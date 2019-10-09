@@ -206,9 +206,10 @@ static int uart_line_ioctl(wskt_t* skt, wskt_ioctl_t* cmd) {
             uart_select(cfg->uartSelect);
             break;
         }
-        // Flush any tx bytes left hanging about
-        case IOCTL_FLUSHTX: {
+        // Flush any tx or rx bytes left hanging about
+        case IOCTL_FLUSHTXRX: {
             circ_bbuf_flush(&cfg->txBuff);
+            circ_bbuf_flush(&cfg->rxBuff);
             break;
         }
         case IOCTL_CHECKTX: {

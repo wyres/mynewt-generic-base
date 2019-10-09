@@ -32,6 +32,7 @@ void wconsole_mgr_init(const char* dname, uint32_t baudrate, int8_t uartSelect);
 // Start console with specific set of at cmds
 void wconsole_start(uint8_t ncmds, ATCMD_DEF_t* cmds, uint32_t idleTimeoutS);
 void wconsole_stop();
+bool wconsole_isInit();
 bool wconsole_isActive();
 bool wconsole_println(const char* l, ...);
 

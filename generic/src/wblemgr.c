@@ -152,7 +152,7 @@ static SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
             // just check if anybody's data waiting
             if (wskt_ioctl(ctx->cnx, &cmd)!=0) {
                 log_debug("BLE: flushing old tx");
-                cmd.cmd = IOCTL_FLUSHTX;
+                cmd.cmd = IOCTL_FLUSHTXRX;
                 cmd.param = 0;
                 wskt_ioctl(ctx->cnx, &cmd);
             }
@@ -468,7 +468,7 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
     assert(0);      // shouldn't get here
 }
 // State table : note can be in any order as the 'id' field is what maps the state id to the rest
-static SM_STATE_t _bleSM[MS_BLE_LAST] = {
+static const SM_STATE_t _bleSM[MS_BLE_LAST] = {
     {.id=MS_BLE_OFF,        .name="BleOff",       .fn=State_Off},
     {.id=MS_BLE_WAITPOWERON,.name="BleWaitPower", .fn=State_WaitPoweron},
     {.id=MS_BLE_WAIT_TYPE,  .name="BleWaitType", .fn=State_WaitTypeSet},

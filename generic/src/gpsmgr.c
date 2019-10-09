@@ -35,6 +35,7 @@ static char* HOT_START="$PMTK101*32\r\n";
 static char* COLD_START="$PMTK103*30\r\n";
 // Standby mode is 500uA, but can be exited by uart data... but must send it a start command?
 static char* STANDBY_MODE="$PMTK161,0*28\r\n";
+static char* STARTUP_RESP="$PMTK";      // Only need to check start of response
 
 static struct appctx {
     struct os_event myGPSEvent;
@@ -52,6 +53,7 @@ static struct appctx {
     uint32_t lastFixTime;
     GPS_CB_FN_t cbfn;
     uint8_t commOk;     // Count of good lines received or 0 if not active
+    uint8_t startupCnt; // count of times we see the gps staryup response in each session to detect brownouts
 } _ctx = {
     .powerMode = POWER_ONOFF,
     .lastFixTime = 0,
@@ -88,6 +90,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             log_debug("GPS: idle");
             // ensure clean state
             ctx->commOk = 0;
+            ctx->startupCnt = 0;
             if (ctx->cnx!=NULL) {
                 wskt_close(&ctx->cnx);  
                 ctx->cnx=NULL;    
@@ -117,6 +120,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
     switch(e) {
         case SM_ENTER: {
             ctx->commOk = 0;        // just starting...
+            ctx->startupCnt = 0;
             // Power up using power pin
             if (ctx->pwrPin>=0) {
                 log_debug("GPS: ON pin %d", ctx->pwrPin);
@@ -124,10 +128,6 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
             } else {
                 log_debug("GPS: no gps power control");
             }
-            // Select it as UART device (if required)
-//            if (ctx->uartSelect>=0) {
-//                uart_select(ctx->uartSelect);
-//            }
             // initialise comms to the gps via the uart like comms device defined in syscfg
             ctx->cnx = wskt_open(ctx->uartDevice, &ctx->myGPSEvent, os_eventq_dflt_get()); //&ctx->gpsMgrEQ);
 //            assert(ctx->cnx!=NULL);
@@ -179,7 +179,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
             if (wskt_ioctl(ctx->cnx, &cmd)!=0) {
                 // todo if required we could send the event to ourselves again and busywait on the tx being done...
                 log_debug("GPS: flushing old tx");
-                cmd.cmd = IOCTL_FLUSHTX;
+                cmd.cmd = IOCTL_FLUSHTXRX;
                 cmd.param = 0;
                 wskt_ioctl(ctx->cnx, &cmd);
             }
@@ -318,7 +318,7 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
     assert(0);      // shouldn't get here
 }
 // State table : note can be in any order as the 'id' field is what maps the state id to the rest
-static SM_STATE_t _mySM[MS_LAST] = {
+static const SM_STATE_t _mySM[MS_LAST] = {
     {.id=MS_IDLE,           .name="Idle",       .fn=State_Idle},
     {.id=MS_STARTING_COMM,    .name="StartingComm", .fn=State_StartingComm},    
     {.id=MS_GETTING_FIX,    .name="GettingFix", .fn=State_GettingFix},    
@@ -451,6 +451,16 @@ static void gps_mgr_rxcb(struct os_event* ev) {
 
         // tell sm
         sm_sendEvent(_ctx.mySMId, ME_GPS_FIX, NULL);
+    } else {
+        // Check for specific response strings received during startup of module 
+        // [$PMTK010,001] is explicit startup message but we only check the start as any PMKT response is only at startup
+        // if returned 5 times during session with no 'normal' messages, the GPS is in brownout -> fail it
+        if (strncmp(line, STARTUP_RESP, 5)==0) {
+            if (_ctx.startupCnt++ > 5) {
+                log_warn("GPS:brownout detected");
+                sm_sendEvent(_ctx.mySMId, ME_GPS_CONN_NOK, NULL);
+            }
+        }
     }
     // and done
 }
@@ -505,7 +515,13 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
         case MINMEA_SENTENCE_GSV: {
             struct minmea_sentence_gsv gsv;
             if (minmea_parse_gsv(&gsv, line)) {
-                log_debug("GPS:GSV %d", gsv.total_sats);
+                int goodsats=0;
+                for(int i=0;i<4;i++) {
+                    if (gsv.sats[i].snr>0) {
+                        goodsats++;
+                    }
+                }
+                log_debug("GPS:GSV %d,%d", gsv.total_sats, goodsats);
             } else {
                 log_debug("GPS:GSV bad");
             }

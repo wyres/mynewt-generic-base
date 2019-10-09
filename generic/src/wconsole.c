@@ -99,8 +99,6 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
                 sm_sendEvent(ctx->mySMId, ME_CN_UART_NOK, NULL);
                 return SM_STATE_CURRENT;
             }
-            // start timeout for comm check - initial timer for 5s to at least get connection up
-            sm_timer_start(ctx->mySMId, 5000);
             // check if uart tx in progress
             sm_sendEvent(ctx->mySMId, ME_CN_UART_OK, NULL);
 
@@ -110,16 +108,9 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
         case SM_EXIT: {
             return SM_STATE_CURRENT;
         }
-        case SM_TIMEOUT: {
-            // done  checking
-            log_debug("CN: reprompt");
-            wskt_write(ctx->cnx, (uint8_t*)STARTPROMPT, strlen(STARTPROMPT));
-            return SM_STATE_CURRENT;
-//            return MS_STOPPING_COMM;
-        }
         case ME_CN_UART_NOK: {
             // ooops, we didnt get our exclusive access...
-            log_debug("CN: Failed to get uart exclusive!");
+            log_debug("CN: uart access failed");
             return MS_IDLE;
         }
         case ME_CN_UART_OK: {
@@ -132,7 +123,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
             if (wskt_ioctl(ctx->cnx, &cmd)!=0) {
                 // todo if required we could send the event to ourselves again and busywait on the tx being done...
                 log_debug("CN: flushing old tx");
-                cmd.cmd = IOCTL_FLUSHTX;
+                cmd.cmd = IOCTL_FLUSHTXRX;
                 cmd.param = 0;
                 wskt_ioctl(ctx->cnx, &cmd);
             }
@@ -205,7 +196,7 @@ static SM_STATE_ID_t State_Active(void* arg, int e, void* data) {
         }
 
         case ME_STOP_CONSOLE: {
-            // this is synchronous for this use so shutdown is done in the stop call...
+            // this is synchronous for this use as shutdown is done in the stop call...
             return MS_IDLE;
         }
         case ME_NEW_DATA: {
@@ -294,6 +285,9 @@ void wconsole_stop() {
         // Tell SM
         sm_sendEvent(_ctx.mySMId, ME_STOP_CONSOLE, NULL);
     }
+}
+bool wconsole_isInit() {
+    return (_ctx.mySMId!=NULL);
 }
 bool wconsole_isActive() {
     // Ignore if not initialised
