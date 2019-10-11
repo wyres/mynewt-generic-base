@@ -21,7 +21,7 @@
 
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/configmgr.h"
-#include "wyres-generic/rebootMgr.h"
+#include "wyres-generic/rebootmgr.h"
 #include "wyres-generic/timemgr.h"
 
 // Led task should be high pri as does very little but wants to do it in real time

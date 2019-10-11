@@ -22,7 +22,7 @@
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/gpiomgr.h"
 
-#include "wyres-generic/sensorMgr.h"
+#include "wyres-generic/sensormgr.h"
 
 // debug : must disable ext-button reading if using it for debug output
 #if MYNEWT_VAL(UART_DBG)

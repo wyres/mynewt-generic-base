@@ -18,7 +18,7 @@
 #include "wyres-generic/gpiomgr.h"
 #include "wyres-generic/gpsmgr.h"
 #include "wyres-generic/lowpowermgr.h"
-#include "wyres-generic/uartSelector.h"
+#include "wyres-generic/uartselector.h"
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/minmea.h"
 #include "wyres-generic/sm_exec.h"

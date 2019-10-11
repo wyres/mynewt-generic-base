@@ -16,7 +16,7 @@
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/gpiomgr.h"
 #include "wyres-generic/lowpowermgr.h"
-#include "wyres-generic/uartSelector.h"
+#include "wyres-generic/uartselector.h"
 
 static int8_t _gpio0;
 static int8_t _gpio1;

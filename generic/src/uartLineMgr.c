@@ -22,12 +22,12 @@
 #include "bsp/bsp.h"
 #include "uart/uart.h"
 
-#include "wyres-generic/uartLineMgr.h"
+#include "wyres-generic/uartlinemgr.h"
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/gpiomgr.h"
 #include "wyres-generic/wskt_driver.h"
 #include "wyres-generic/circbuf.h"
-#include "wyres-generic/uartSelector.h"
+#include "wyres-generic/uartselector.h"
 
 // If got a separate debug uart line, then allowed to do real logs in here, otherwise its the debugger only version that does actually output!
 #define log_uartbdg log_noout_fn

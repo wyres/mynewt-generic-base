@@ -18,7 +18,7 @@
 #include "wyres-generic/wblemgr.h"
 #include "wyres-generic/lowpowermgr.h"
 #include "wyres-generic/gpiomgr.h"
-#include "wyres-generic/uartSelector.h"
+#include "wyres-generic/uartselector.h"
 #include "wyres-generic/sm_exec.h"
 
 #define WBLE_UART    MYNEWT_VAL(WBLE_UART)
