@@ -41,7 +41,7 @@ pkg.init:
     led_mgr_init : 103
     uart_selector_init : 104
     uart_line_comm_init : 105
-    log_init : 106      # must be after uart line init
+    wlog_init : 106      # must be after uart line init
 #    movement_init : 106
     SRMgr_init: 107
     init_sm_exec : 110

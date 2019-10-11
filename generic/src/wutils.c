@@ -250,7 +250,7 @@ bool unittest(const char* tn, bool res) {
 }
 
 // Called from sysinit once uarts etc are up
-void log_init(void) {
+void wlog_init(void) {
     bool res = true;
     // no console
 #if MYNEWT_VAL(CONSOLE_UART) 
