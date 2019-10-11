@@ -19,6 +19,7 @@
 extern "C" {
 #endif
 
+// Why did I reboot last time?
 const char* RMMgr_getResetReason();
 uint16_t RMMgr_getResetReasonCode();
 // get list of last 'sz' entries from the reboot reason list, with latest first.
