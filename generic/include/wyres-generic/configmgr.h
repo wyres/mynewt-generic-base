@@ -19,6 +19,7 @@
 extern "C" {
 #endif
 
+// Use this macro to define unique config key within your 'bloc'
 #define CFGKEY(__m, __k) (((__m & 0xff) << 8) | (__k & 0xff))
 typedef void (*CFG_CBFN_t)(uint16_t key);
 
