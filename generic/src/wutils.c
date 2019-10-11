@@ -23,9 +23,9 @@
 
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/wskt_user.h"
-#include "wyres-generic/uartLineMgr.h"
-#include "wyres-generic/uartSelector.h"
-#include "wyres-generic/rebootMgr.h"
+#include "wyres-generic/uartlinemgr.h"
+#include "wyres-generic/uartselector.h"
+#include "wyres-generic/rebootmgr.h"
 #include "wyres-generic/timemgr.h"
 
 // TODO handle versioning
