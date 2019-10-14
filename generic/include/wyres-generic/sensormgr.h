@@ -20,26 +20,28 @@ extern "C" {
 #endif
 
 // Generic callback to signal something changed (what depends on registration!)
-typedef void (*SR_CBFN_t)(void);
 typedef enum { SR_BUTTON_RELEASED=0, SR_BUTTON_PRESSED=1} SR_BUTTON_STATE_t;
 typedef enum { SR_BUTTON_SHORT, SR_BUTTON_MED, SR_BUTTON_LONG, SR_BUTTON_VLONG } SR_BUTTON_PRESS_TYPE_t;
+typedef void (*SR_BUTTON_CBFN_t)(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType);
+
+typedef void (*SR_NOISE_CBFN_t)(void* ctx, int noiseFreq, int noiseDBm);
 
 void SRMgr_start();
 void SRMgr_stop();
 
 uint32_t SRMgr_getLastButtonTime();
 // Register callback to be notified when button changes state (also means button is active during deep sleep)
-bool SRMgr_registerButtonCB(SR_CBFN_t cb);
+bool SRMgr_registerButtonCB(SR_BUTTON_CBFN_t cb, void* ctx);
 // Remove registration - if noone is registered then button state only checked at UL time..
-void SRMgr_unregisterButtonCB(SR_CBFN_t cb);
+void SRMgr_unregisterButtonCB(SR_BUTTON_CBFN_t cb);
 
 uint32_t SRMgr_getLastNoiseTime();
 uint8_t SRMgr_getNoiseFreqkHz();
 uint8_t SRMgr_getNoiseLeveldB();
 // Register callback to be notified when noise is detected (also means micro is active during deep sleep)
-bool SRMgr_registerNoiseCB(SR_CBFN_t cb);
+bool SRMgr_registerNoiseCB(SR_NOISE_CBFN_t cb, void* ctx);
 // Remove registration - if noone is registered then micro input only checked at UL time..
-void SRMgr_unregisterNoiseCB(SR_CBFN_t cb);
+void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb);
 
 // When did temp, pressure, battery, light last change 'significantly'?
 uint32_t SRMgr_getLastEnvChangeTime();

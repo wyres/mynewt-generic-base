@@ -139,7 +139,7 @@ static void do_log(char lev, const char* ls, va_list vl) {
             _buf[0] = '*';
             wskt_write(_uartSkt, (uint8_t*)_buf, 1);      // so user knows he missed something.
             // Not actually a lot we can do about this especially if its a flow control (SKT_NOSPACE) condition - ignore it
-           log_noout_fn("log write FAIL");      // just for debugger to watch
+           log_noout_fn("log FAIL[%s]", _buf);      // just for debugger to watch
        }
    }
 }

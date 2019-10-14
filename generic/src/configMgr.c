@@ -241,7 +241,7 @@ void CFMgr_init(void) {
     uint8_t nbK_sec = hal_bsp_nvmRead8(1);
     if (nbK_sec!=nbK_pri) {
         // oops. can't log yet
-    //  log_warn("PROM cfg store corruption possible...");
+        log_noout("PROM cfg store corruption (%d, %d)", nbK_pri, nbK_sec);
     }
     _cfg.nbKeys = nbK_pri;
     _cfg.indexStart = hal_bsp_nvmRead16(2);
@@ -249,6 +249,7 @@ void CFMgr_init(void) {
     if (_cfg.indexStart<NVM_HDR_SIZE|| _cfg.indexStart>hal_bsp_nvmSize() ||
              _cfg.storeStart<NVM_HDR_SIZE || _cfg.storeStart>hal_bsp_nvmSize() || 
              _cfg.storeStart < (_cfg.indexStart+MAX_KEYS*INDEX_SIZE)) {
+        log_noout("CFG BAD, resetting");
         _cfg.nbKeys=0;
         _cfg.indexStart=NVM_HDR_SIZE;
         _cfg.storeStart=_cfg.indexStart + (MAX_KEYS+1)*INDEX_SIZE;

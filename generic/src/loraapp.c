@@ -281,8 +281,8 @@ void lora_app_init( LORA_RES_CB_FN_t txcb, LORA_RX_CB_FN_t rxcb) {
     CFMgr_getOrAddElement(CFG_UTIL_KEY_ACKEN, &_loraCfg.useAck, sizeof(bool));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_DR, &_loraCfg.loraDR, sizeof(uint8_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_TXPOWER, &_loraCfg.txPower, sizeof(int8_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_TXPORT, &_loraCfg.txPower, sizeof(uint8_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_RXPORT, &_loraCfg.txPower, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_TXPORT, &_loraCfg.txPort, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_RXPORT, &_loraCfg.rxPort, sizeof(uint8_t));
 
     uint8_t nb_rep = 1;
 

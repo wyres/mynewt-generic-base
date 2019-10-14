@@ -39,8 +39,14 @@
 
 // store values in between checks
 static struct {
-    SR_CBFN_t buttonCBs[MAX_CBS];
-    SR_CBFN_t noiseCBs[MAX_CBS];
+    struct {
+        SR_BUTTON_CBFN_t fn;
+        void* ctx;
+    } buttonCBs[MAX_CBS];
+    struct {
+        SR_NOISE_CBFN_t fn;
+        void* ctx;
+    } noiseCBs[MAX_CBS];
     uint32_t lastReadTS;
     uint32_t lastSignificantChangeTS;
     uint32_t lastButtonPressTS;
@@ -85,9 +91,9 @@ static uint8_t mapButton(int in);
 // Called from sysinit
 void SRMgr_init(void) {
     memset(&_ctx, 0, sizeof(_ctx));
-    // if ext button is enabled, its IRQ etc runs all the time
     os_callout_init(&(_ctx.buttonDebounceTimer), os_eventq_dflt_get(), buttonCheckDebounced, &_ctx);
     if (EXT_BUTTON>=0) {
+        // if ext button is enabled, its IRQ etc runs all the time even during deepsleep
         GPIO_define_irq("button", EXT_BUTTON, buttonCB, &_ctx, HAL_GPIO_TRIG_BOTH, HAL_GPIO_PULL_UP, LP_DEEPSLEEP);
     }
 
@@ -109,44 +115,46 @@ void SRMgr_stop() {
     deconfig();
 }
 
-bool SRMgr_registerButtonCB(SR_CBFN_t cb) {
+bool SRMgr_registerButtonCB(SR_BUTTON_CBFN_t cb, void* c) {
     if (EXT_BUTTON>=0) {
         for(int i=0;i<MAX_CBS;i++) {
-            if (_ctx.buttonCBs[i]==NULL) {
-                _ctx.buttonCBs[i] = cb;
+            if (_ctx.buttonCBs[i].fn==NULL) {
+                _ctx.buttonCBs[i].fn = cb;
+                _ctx.buttonCBs[i].ctx = c;
                 return true;
             }
         }
     }
     return false;       // no space or no button defined
 }
-void SRMgr_unregisterButtonCB(SR_CBFN_t cb) {
+void SRMgr_unregisterButtonCB(SR_BUTTON_CBFN_t cb) {
     for(int i=0;i<MAX_CBS;i++) {
-        if (_ctx.buttonCBs[i]==cb) {
-            _ctx.buttonCBs[i] = NULL;
+        if (_ctx.buttonCBs[i].fn==cb) {
+            _ctx.buttonCBs[i].fn = NULL;
         }
     }
 }
 
 // Register callback to be notified when noise is detected (also means micro is active during deep sleep)
-bool SRMgr_registerNoiseCB(SR_CBFN_t cb) {
+bool SRMgr_registerNoiseCB(SR_NOISE_CBFN_t cb, void* c) {
     // Activate microphone stuff TODO
     for(int i=0;i<MAX_CBS;i++) {
-        if (_ctx.noiseCBs[i]==NULL) {
-            _ctx.noiseCBs[i] = cb;
+        if (_ctx.noiseCBs[i].fn==NULL) {
+            _ctx.noiseCBs[i].fn = cb;
+            _ctx.noiseCBs[i].ctx = c;
             return true;
         }
     }
     return false;       // no space
 }
 // Remove registration - if noone is registered then micro input only checked at UL time..
-void SRMgr_unregisterNoiseCB(SR_CBFN_t cb) {
+void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb) {
     bool atLeastOneCB = false;
     for(int i=0;i<MAX_CBS;i++) {
-        if (_ctx.noiseCBs[i]==cb) {
-            _ctx.noiseCBs[i] = NULL;
+        if (_ctx.noiseCBs[i].fn==cb) {
+            _ctx.noiseCBs[i].fn = NULL;
         }
-        if (_ctx.noiseCBs[i]!=NULL) {
+        if (_ctx.noiseCBs[i].fn!=NULL) {
             atLeastOneCB = true;
         }
     }
@@ -291,12 +299,14 @@ static void buttonCB(void* arg) {
 static void buttonCheckDebounced(struct os_event* e) {
     // Read the button state NOW
     _ctx.currButtonState = mapButton(GPIO_read(EXT_BUTTON));
-    // And compare to when it first changed
+    // And compare to when it first changed - only if its still different will we deal with it
     if (_ctx.currButtonState != _ctx.lastDebounceButtonState) {
         // Manage "short press", "2s press", "5s press", "10s press" etc
         if (_ctx.currButtonState==SR_BUTTON_PRESSED) {
             // Pressed
             _ctx.lastButtonPressTS = TMMgr_getRelTime();
+            // TODO start timer to do on-going button press length checks (ie signal 'long press' while not yet released)
+
         } else {
             // released
             _ctx.lastButtonReleaseTS = TMMgr_getRelTime();
@@ -305,8 +315,8 @@ static void buttonCheckDebounced(struct os_event* e) {
         }
         // call callbacks
         for(int i=0;i<MAX_CBS;i++) {
-            if (_ctx.buttonCBs[i]!=NULL) {
-                (*(_ctx.buttonCBs[i]))();
+            if (_ctx.buttonCBs[i].fn!=NULL) {
+                (*(_ctx.buttonCBs[i].fn))(_ctx.buttonCBs[i].ctx, _ctx.currButtonState, calcButtonPressType(TMMgr_getRelTime() - _ctx.lastButtonPressTS));
             }
         }
     } // else it toggled but settled into same state as before -> no transition
