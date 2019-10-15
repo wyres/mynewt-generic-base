@@ -45,6 +45,7 @@ static struct blectx {
     struct os_mutex dataMutex;
     SM_ID_t mySMId;
     const char* uartDevice;
+    uint32_t baudrate;
     int8_t pwrPin;
     int8_t uartSelect;
     wskt_t* cnx;
@@ -158,7 +159,7 @@ static SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
             }
             // Set baud rate
             cmd.cmd = IOCTL_SET_BAUD;
-            cmd.param = MYNEWT_VAL(BLE_UART_BAUDRATE);
+            cmd.param = ctx->baudrate;
             wskt_ioctl(ctx->cnx, &cmd);
             // Set eol to be LF
             cmd.cmd = IOCTL_SETEOL;
@@ -480,7 +481,7 @@ static const SM_STATE_t _bleSM[MS_BLE_LAST] = {
 };
 
 // Called from sysinit via reference in pkg.yml
-void* wble_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect) {
+void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect) {
     // Ignore multiple inits as this code can't handle them....
     // TODO if required to support multiple BLEs on multiple UARTs....
     if (_ctx.uartDevice!=NULL) {
@@ -494,6 +495,7 @@ void* wble_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect) {
         }
     }
     _ctx.uartDevice = dname;
+    _ctx.baudrate = baudrate;
     _ctx.uartSelect=uartSelect;
     _ctx.pwrPin = pwrPin;
     if (_ctx.pwrPin>=0) {

@@ -29,7 +29,7 @@ typedef struct ibeacon_data {
 } ibeacon_data_t;
 typedef void (*WBLE_CB_FN_t)(WBLE_EVENT_t e, ibeacon_data_t* b);
 
-void* wble_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect);
+void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect);
 
 // start connection
 void wble_start(void* ctx, WBLE_CB_FN_t cb);

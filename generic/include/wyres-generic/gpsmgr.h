@@ -32,7 +32,7 @@ typedef struct gps_data {
 typedef enum { GPS_COMM_OK, GPS_COMM_FAIL, GPS_SATOK, GPS_SATLOSS, GPS_NEWFIX, GPS_DONE } GPS_EVENT_TYPE_t;
 typedef void (*GPS_CB_FN_t)(GPS_EVENT_TYPE_t e);
 
-void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect);
+void gps_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect);
 
 void gps_setPowerMode(GPS_POWERMODE_t m);
 bool gps_getData(gps_data_t* d);

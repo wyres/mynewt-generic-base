@@ -23,7 +23,7 @@
 #include "wyres-generic/minmea.h"
 #include "wyres-generic/sm_exec.h"
 
-#define GPS_UART    MYNEWT_VAL(GPS_UART)
+//#define GPS_UART    MYNEWT_VAL(GPS_UART)
 //#define GPS_TASK_PRIO       MYNEWT_VAL(GPS_TASK_PRIO)
 //#define GPS_TASK_STACK_SZ   OS_STACK_ALIGN(256)
 //static os_stack_t _gps_task_stack[GPS_TASK_STACK_SZ];
@@ -44,6 +44,7 @@ static struct appctx {
     SM_ID_t mySMId;
     uint32_t fixTimeoutSecs;
     const char* uartDevice;
+    uint32_t baudrate;
     int8_t pwrPin;
     GPS_POWERMODE_t powerMode;
     int8_t uartSelect;
@@ -185,7 +186,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
             }
             // Set baud rate
             cmd.cmd = IOCTL_SET_BAUD;
-            cmd.param = MYNEWT_VAL(GPS_UART_BAUDRATE);
+            cmd.param = ctx->baudrate;     
             wskt_ioctl(ctx->cnx, &cmd);
             // Set eol to be LF
             cmd.cmd = IOCTL_SETEOL;
@@ -326,8 +327,9 @@ static const SM_STATE_t _mySM[MS_LAST] = {
 };
 
 // Called from appinit or app core module
-void gps_mgr_init(const char* dname, int8_t pwrPin, int8_t uartSelect) {
+void gps_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect) {
     _ctx.uartDevice = dname;
+    _ctx.baudrate=baudrate;
     _ctx.uartSelect=uartSelect;
     _ctx.pwrPin = pwrPin;
     if (_ctx.pwrPin>=0) {

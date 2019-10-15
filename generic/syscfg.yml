@@ -1,26 +1,21 @@
 syscfg.defs:
     # task priorities : lower is higher priority : NOTE : MUST NOT HAVE 2 TASKS WITH SAME PRIO OR SYSTEM FAULT
+    # redefine in target sys.yml to ensure uniqueness with rest of your app
     SM_TASK_PRIO:
         description: "state machine execution task priority"
-        value: 199
+        value: -1       #199
     L96COMM_TASK_PRIO:
         description: "L96 comm driver task priority"
-        value: 103
+        value: -1       #103
     LORAAPP_TASK_PRIO:
         description: "Wyres lorawan wrapper task priority"
-        value: 102
-    WBLE_TASK_PRIO:
-        description: "Wyres ble reception and parsing task priority"
-        value: 101
-    GPS_TASK_PRIO:
-        description: "GPS reception and parsing task priority"
-        value: 100
+        value: -1       #102
     LEDMGR_TASK_PRIO:
         description: "led manager task priority"
-        value: 19
+        value: -1       #19
     WATCHDOG_TASK_PRIO:
         description: "watchdog task priority"
-        value: 9
+        value: -1       #9
 
     MAX_LEDS:
         description: "Max number of leds in this system"
@@ -66,13 +61,6 @@ syscfg.defs:
         value: 200
 
 
-    UART_SELECT0:
-        description: "gpio pin for uart selector bit0"
-        value: -1
-    UART_SELECT1:
-        description: "gpio pin for uart selector bit1"
-        value: -1
-        
     
     LOG_UART_ENABLED:
         description: "is logging to a UART enabled?"
@@ -86,6 +74,54 @@ syscfg.defs:
     LOG_UART_SELECT:
         description: "code for uart switcher for logging connector. Set to -1 if not using"
         value: -1
+
+    # uartselector config
+    UART_SELECT0:
+        description: "gpio pin for uart selector bit0 (eg extio)"
+        value: -1
+    UART_SELECT1:
+        description: "gpio pin for uart selector bit1 (eg spkr)"
+        value: -1
+    UART_SELECT_LR:
+        description: "code for uart switcher for L/R: spkr=1,extio=0  (BUT SPKR INVERTED) [EXT]"
+        value: 0
+    UART_SELECT_USB:
+        description: "code for uart switcher for TX/RX: spkr=0,extio=1  (BUT SPKR INVERTED) [BLE]"
+        value: 1
+    UART_SELECT_HIZ:
+        description: "code for uart switcher for hiZ: spkr=0,extio=0  (BUT SPKR INVERTED)"
+        value: 2
+    UART_SELECT_DD:
+        description: "code for uart switcher for D+/D-: spkr=1,extio=1  (BUT SPKR INVERTED) [GPS]"
+        value: 3
+    
+
+    L96_0_NAME:
+        description: "device number for L96 first device"
+        value: '"L96_0"'
+    L96_0_I2C_CHAN:
+        description: "I2C channel for GPS module L96"
+        value: 0
+    L96_0_I2C_ADDR:
+        description: "I2C id for GPS module L96"
+        value: 92
+
+# ESP32 handler
+    WIFO_PWRIO:
+        description: "gpio pin to enable power on wifi (11)"
+        value: -1       # EXT_UART_PWR
+    WIFI_UART:
+        description: "uart socket device name to use to talk to ESP32  (from BSP)"
+        value: 'UART0_DEV'
+    WIFI_UART_BAUDRATE:
+        description: "baudrate for uart to use to talk to ESP32"
+        value: 19200
+    WIFI_SCAN_LED:
+        description: "LED to signal WIFI is active"
+        value: -1       # LED_2        #15 # PA15 - LED2 from BSP??
+    WIFI_SCAN_PATTERN:
+        description: "LED flash pattern for wifi scan"
+        value: "1000010000"
 
 syscfg.vals:
     # hook reboot and assert operations in mynewt OS
