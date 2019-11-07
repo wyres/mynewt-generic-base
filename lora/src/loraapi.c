@@ -23,14 +23,18 @@
 #define LORAAPI_TASK_STACK_SZ   OS_STACK_ALIGN(256)
 
 // How many people can wait for something at same time? also indicates how many outstanding requests can exist together
-#define MAX_JOINCBS   (1)       // app can have multiple branchs that join but its not recommended
 #define MAX_TXCBS   (4)         // Can q up to 4 tx requests
 #define MAX_RXCBS   (2)         // can register 2 rx callbacks on different ports
 #define MAX_TXRADIOCBS   (1)    // as not yet implemented
 #define MAX_RXRADIOCBS   (1)    // or maybe coz don't need this fn
+#define MAX_LORA_DATA_SZ (250)
 
 #define MAX_LWEVTS  (4)     // only 4 outstanding lorawan->task events at any time
-typedef enum { LWEVT_TYPE_UNUSED, LWEVT_TYPE_MCPS_CONFIRM, LWEVT_TYPE_MCPS_INDICATION, LWEVT_TYPE_MLME_CONFIRM, LWEVT_TYPE_MLME_INDICATION } LWEVT_TYPE_t;
+
+typedef enum { LWEVT_TYPE_UNUSED, 
+    LWEVT_TYPE_MCPS_CONFIRM, LWEVT_TYPE_MCPS_INDICATION, LWEVT_TYPE_MLME_CONFIRM, LWEVT_TYPE_MLME_INDICATION,
+    LWEVT_TYPE_DOJOIN, LWEVT_TYPE_DOTXLW, LWEVT_TYPE_DOTXRADIO, LWEVT_TYPE_DORXRADIO
+ } LWEVT_TYPE_t;
 typedef struct {
     LWEVT_TYPE_t type;
     union {
@@ -41,28 +45,33 @@ typedef struct {
     } msg;
 } LWEVT_t;
 
-
-static struct loraapi_ctx {
-    struct {
+typedef struct {
         LORAWAN_JOIN_CB_t cbfn;
         void* userctx;
-    } joinLoraWANReqs[MAX_JOINCBS];
-    struct {
+    } JoinReq_t;
+
+typedef struct  {
         LORAWAN_TX_CONTRACT_t contract;
+        struct os_callout timer;
+        uint32_t createTSMS;
         LORAWAN_SF_t sf;
         int8_t power;
         uint8_t port;
-        uint8_t* data;
+        uint8_t data[MAX_LORA_DATA_SZ];         // this is a bit sucky
         uint8_t sz;
         LORAWAN_TX_CB_t cbfn;
         void* userctx;
-    } txLoraWANReqs[MAX_TXCBS];
-    struct {
-        uint8_t port;
+        bool txInProgress;
+    } TxLoraWanReq_t;
+
+typedef struct  {
+        int port;       // as can be -1 to say all (app) ports
         LORAWAN_RX_CB_t cbfn;
         void* userctx;
-    } rxLoraWANReqs[MAX_RXCBS];
-    struct {
+    } RxLoraWanReq_t;
+
+typedef struct  {
+        struct os_callout timer;
         uint32_t atTxMS;
         int8_t power;
         uint32_t freq;
@@ -71,8 +80,10 @@ static struct loraapi_ctx {
         uint8_t sz;
         LORAWAN_TX_CB_t cbfn;
         void* userctx;        
-    } txRadioReqs[MAX_TXRADIOCBS];
-    struct {
+    } TxRadioReq_t;
+
+typedef struct  {
+        struct os_callout timer;
         uint32_t atRxMS;
         uint32_t tRxMS;
         uint32_t freq;
@@ -81,7 +92,17 @@ static struct loraapi_ctx {
         uint8_t sz;
         LORAWAN_RX_CB_t cbfn;
         void* userctx;        
-    } rxRadioReqs[MAX_RXRADIOCBS];
+    } RxRadioReq_t;
+
+static struct loraapi_ctx {
+    bool isJoin;
+    LORAWAN_SF_t defaultSF;
+    int defaultLWPower;
+    JoinReq_t joinLoraWANReq;
+    TxLoraWanReq_t txLoraWANReqs[MAX_TXCBS];
+    RxLoraWanReq_t rxLoraWANReqs[MAX_RXCBS];
+    TxRadioReq_t txRadioReqs[MAX_TXRADIOCBS];
+    RxRadioReq_t rxRadioReqs[MAX_RXRADIOCBS];
     uint8_t deveui[8];
     uint8_t appeui[8];
     uint8_t appkey[16];
@@ -95,42 +116,52 @@ static struct loraapi_ctx {
     } lwevts[MAX_LWEVTS];
     struct os_mutex lwevts_mutex;
     uint32_t noEventCnt;        // could each time we have event pool starvation
-} _loraCtx = {
-//    .deveui = {0x38,0xE8,0xEB,0xE0, 0x00, 0x00, 0x0d, 0x78},
-    .deveui = {0x38,0xb8,0xeb,0xe0, 0x00, 0x00, 0xFF, 0xFF},
-//    .appeui = {0x01,0x23,0x45,0x67, 0x89, 0xab, 0xcd, 0xef},
-//    .appeui = {0x38,0xE8,0xEB,0xEA, 0xBC, 0xDE, 0xF0, 0x42},
-    .appeui = {0x38,0xE8,0xEB,0xE0, 0x00, 0x00, 0x00, 0x00},
-    .appkey = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF},
-    .noEventCnt=0,
-};
+} _loraCtx;     // Note : initialised to all 0 in init method
 
+static struct os_event* allocEvent();
+static void freeEvent(struct os_event* e);
 static void loraapi_task(void* data);
+static void execStackEvent(struct os_event* e);
+static void execTxLora(struct os_event* e);
+static void execTxRadio(struct os_event* e);
+static void execRxRadio(struct os_event* e);
+static uint32_t getNowMS();
+static uint8_t maxSz4SF(int sf);
 
 /** API implementation */
 
 bool lora_api_isJoined() {
-    return false;
+    return _loraCtx.isJoin;
 }
 
  // Do the join (if already joined, returns this status to the callback)
 LORAWAN_RESULT_t lora_api_join(LORAWAN_JOIN_CB_t callback, LORAWAN_SF_t sf, void* userctx) {
+    assert(callback!=NULL);
     if (lora_api_isJoined()) {
-        // fake a join accept to do event to do callback to say joined???
-        // TODO
-        return LORAWAN_RES_OK;
+        return LORAWAN_RES_JOIN_OK;
     }
     // Start join process
-    // Check for a free slot
-    for(int i=0;i<MAX_RXCBS;i++) {
-        if (_loraCtx.joinLoraWANReqs[i].cbfn==NULL) {
-            _loraCtx.joinLoraWANReqs[i].cbfn = callback;
-            _loraCtx.joinLoraWANReqs[i].userctx = userctx;
-            // kick off join request
-            // TODO
+    // Check not already in progress
+    if (_loraCtx.joinLoraWANReq.cbfn==NULL) {
+        _loraCtx.defaultSF = sf;
+        _loraCtx.joinLoraWANReq.cbfn = callback;
+        _loraCtx.joinLoraWANReq.userctx = userctx;
+        // kick off join request
+        struct os_event* e = allocEvent();
+        if (e!=NULL) {
+            LWEVT_t* evt = (LWEVT_t*)e->ev_arg;
+            evt->type = LWEVT_TYPE_DOJOIN;
+            os_eventq_put(&_loraCtx.lwevt_q, e);
             return LORAWAN_RES_OK;
+        } else {
+            // oopsie
+            _loraCtx.noEventCnt++;
+            return LORAWAN_RES_DUTYCYCLE;
         }
+    } else {
+        return LORAWAN_RES_OCC;
     }
+    
     // soz
     return LORAWAN_RES_NOT_JOIN;
 }
@@ -139,6 +170,7 @@ LORAWAN_RESULT_t lora_api_join(LORAWAN_JOIN_CB_t callback, LORAWAN_SF_t sf, void
 // data buffer given during callback will be valid only during callback (which must not block)
 // Returns request id, which can be used to cancel this registration at a later point
 LORAWAN_REQ_ID_t lora_api_registerRxCB(int port, LORAWAN_RX_CB_t callback, void* userctx) {	// calls the cb whenever pkt rxed (whether on classA, B, or C)
+    assert(callback!=NULL);
     // Check for a free slot
     for(int i=0;i<MAX_RXCBS;i++) {
         if (_loraCtx.rxLoraWANReqs[i].cbfn==NULL) {
@@ -150,13 +182,30 @@ LORAWAN_REQ_ID_t lora_api_registerRxCB(int port, LORAWAN_RX_CB_t callback, void*
     }
     return NULL;
 }
-
+static bool scheduleTxLoraWanReq(TxLoraWanReq_t* req) {
+    // calculate in how long we want to schedule it (or in 100ms if 'immediately')
+    uint32_t remainingdelayms = req->contract.txTimePeriodSecs!=0 ? (req->createTSMS+(req->contract.txTimePeriodSecs*1000)) - getNowMS() : 100;
+    // TODO calculate required time for rx windows using the SF etc...
+    if (remainingdelayms<((req->contract.doRx|req->contract.reqAck)?16000:2000)) {
+        return false;       // no can do in remaining time...
+    }
+    os_callout_reset(&req->timer, os_time_ms_to_ticks32(remainingdelayms));
+    return true;
+}
 // schedule a tx for time determined by <contract>
 // contract is ctype (eg anytime, within next X, at absolute/relative time), and time
-// data is COPIED during call, caller can reuse buffer
+// data is COPIED during call, caller can reuse buffer (this is not so good for memory usage....)
 // Returns id for the tx (will be used in callback) or NULL if not scheduled because tx queue is full
-LORAWAN_REQ_ID_t lora_api_send(LORAWAN_SF_t sf, uint8_t port, LORAWAN_TX_CONTRACT_t contract, 
+LORAWAN_REQ_ID_t lora_api_send(LORAWAN_SF_t sf, uint8_t port, LORAWAN_TX_CONTRACT_t* contract, 
                 uint8_t* data, uint8_t sz, LORAWAN_TX_CB_t callback, void* userctx) {
+    assert(callback!=NULL);
+    assert(data!=NULL);
+    if (sf==LORAWAN_SF_DEFAULT) {
+        sf = _loraCtx.defaultSF;
+    }
+    if (sz>maxSz4SF(sf)) {
+        sz=maxSz4SF(sf);
+    }
     // Check for a free slot
     for(int i=0;i<MAX_TXCBS;i++) {
         if (_loraCtx.txLoraWANReqs[i].cbfn==NULL) {
@@ -164,13 +213,22 @@ LORAWAN_REQ_ID_t lora_api_send(LORAWAN_SF_t sf, uint8_t port, LORAWAN_TX_CONTRAC
             _loraCtx.txLoraWANReqs[i].userctx = userctx;
             _loraCtx.txLoraWANReqs[i].port = port;
             _loraCtx.txLoraWANReqs[i].sf = sf;
-            _loraCtx.txLoraWANReqs[i].power = 14;       // TODO
-            _loraCtx.txLoraWANReqs[i].data = data;
+            _loraCtx.txLoraWANReqs[i].power = _loraCtx.defaultLWPower;  
+            // Data buffer is static max size for now - better to be mbufs or a malloc??? TODO
+            memcpy(_loraCtx.txLoraWANReqs[i].data, data, sz);
             _loraCtx.txLoraWANReqs[i].sz = sz;
-            _loraCtx.txLoraWANReqs[i].contract = contract;
-            // tell task to schedule
-            // TODO
-            return &_loraCtx.txLoraWANReqs[i];
+            _loraCtx.txLoraWANReqs[i].contract.doRx = contract->doRx;
+            _loraCtx.txLoraWANReqs[i].contract.priority = contract->priority;
+            _loraCtx.txLoraWANReqs[i].contract.reqAck = contract->reqAck;
+            _loraCtx.txLoraWANReqs[i].contract.txTimePeriodSecs = contract->txTimePeriodSecs;
+            
+            // tell task to schedule tx request
+            if (scheduleTxLoraWanReq(&_loraCtx.txLoraWANReqs[i])) {
+                return &_loraCtx.txLoraWANReqs[i];
+            } 
+            // oops
+            _loraCtx.txLoraWANReqs[i].cbfn = NULL;      // free slot
+            return NULL;
         }
     }
     return NULL;
@@ -178,36 +236,49 @@ LORAWAN_REQ_ID_t lora_api_send(LORAWAN_SF_t sf, uint8_t port, LORAWAN_TX_CONTRAC
 
 // Schedule direct radio tx access for specific time
 LORAWAN_REQ_ID_t lora_api_radio_tx(uint32_t abs_time, LORAWAN_SF_t sf, uint32_t freq, int txpower, uint8_t* data, uint8_t sz, LORAWAN_TX_CB_t callback, void* userctx) {
+    assert(callback!=NULL);
+    assert(data!=NULL);
     // Check for a free slot
     for(int i=0;i<MAX_TXRADIOCBS;i++) {
-        if (_loraCtx.txRadioReqs[i].cbfn==NULL) {
-            _loraCtx.txRadioReqs[i].cbfn = callback;
-            _loraCtx.txRadioReqs[i].userctx = userctx;
-            _loraCtx.txRadioReqs[i].data = data;
-            _loraCtx.txRadioReqs[i].sz = sz;
-            _loraCtx.txRadioReqs[i].sf = sf;
-            _loraCtx.txRadioReqs[i].freq = freq;
-            _loraCtx.txRadioReqs[i].power = txpower;
-            _loraCtx.txRadioReqs[i].atTxMS = abs_time;
-            return &_loraCtx.rxRadioReqs[i];
+        TxRadioReq_t* req = &_loraCtx.txRadioReqs[i];
+        if (req->cbfn==NULL) {
+            req->cbfn = callback;
+            req->userctx = userctx;
+            req->data = data;
+            req->sz = sz;
+            req->sf = sf;
+            req->freq = freq;
+            req->power = txpower;
+            req->atTxMS = abs_time;
+
+            // TODO : check time is after now, and no other radio request using it....
+            os_callout_reset(&req->timer, os_time_ms_to_ticks32(abs_time - getNowMS()));
+
+            return req;
         }
     }
     return NULL;
 }
 // Schedule direct radio rx access for specific time
 LORAWAN_REQ_ID_t lora_api_radio_rx(uint32_t abs_time, LORAWAN_SF_t sf, uint32_t freq, uint32_t timeoutms, uint8_t* data, uint8_t sz, LORAWAN_RX_CB_t callback, void* userctx) {
+    assert(callback!=NULL);
+    assert(data!=NULL);
     // Check for a free slot
     for(int i=0;i<MAX_RXCBS;i++) {
-        if (_loraCtx.rxRadioReqs[i].cbfn==NULL) {
-            _loraCtx.rxRadioReqs[i].cbfn = callback;
-            _loraCtx.rxRadioReqs[i].userctx = userctx;
-            _loraCtx.txRadioReqs[i].data = data;
-            _loraCtx.txRadioReqs[i].sz = sz;
-            _loraCtx.rxRadioReqs[i].sf = sf;
-            _loraCtx.rxRadioReqs[i].freq = freq;
-            _loraCtx.rxRadioReqs[i].atRxMS = abs_time;
-            _loraCtx.rxRadioReqs[i].tRxMS = timeoutms;
-            return &_loraCtx.rxRadioReqs[i];
+        RxRadioReq_t* req = &_loraCtx.rxRadioReqs[i];
+        if (req->cbfn==NULL) {
+            req->cbfn = callback;
+            req->userctx = userctx;
+            req->data = data;
+            req->sz = sz;
+            req->sf = sf;
+            req->freq = freq;
+            req->atRxMS = abs_time;
+            req->tRxMS = timeoutms;
+            // TODO : check time is after now, and no other radio request using it....
+            os_callout_reset(&req->timer, os_time_ms_to_ticks32(abs_time - getNowMS()));
+
+            return req;
         }
     }
     return NULL;
@@ -215,52 +286,22 @@ LORAWAN_REQ_ID_t lora_api_radio_rx(uint32_t abs_time, LORAWAN_SF_t sf, uint32_t 
 
 // Cancel a pending request. True if cancelled without action, false if already in progress and cannot be cancelled
 bool lora_api_cancel(LORAWAN_REQ_ID_t id) {
+    // TODO - find req in one of the lists, cancel it
     return true;
 }
 
 
 // Internals
 
-/* 
-static bool configSocket(lorawan_sock_t skt) {
-    bool ret = true;
-    lorawan_status_t status;
-    lorawan_attribute_t mib;
-    mib.Type = LORAWAN_ATTR_ADR;
-    mib.Param.AdrEnable = _loraCfg.useAdr;
-    status = lorawan_setsockopt(skt, &mib);
-    if (status != LORAWAN_STATUS_OK) {
-        log_warn("failed to set ADR");
-        ret = false;
-    }
-    mib.Type = LORAWAN_ATTR_MCPS_TYPE;
-    if (_loraCfg.useAck) {
-        mib.Param.McpsType = LORAWAN_MCPS_CONFIRMED;
-    } else {
-        mib.Param.McpsType = LORAWAN_MCPS_UNCONFIRMED;
-    }
-    status = lorawan_setsockopt(skt, &mib);
-    if (status != LORAWAN_STATUS_OK) {
-        log_warn("failed to set ACK");
-        ret = false;
-    }
-    mib.Type = LORAWAN_ATTR_CHANNELS_DATARATE;
-    mib.Param.ChannelsDefaultDatarate = _loraCfg.loraDR;
-    status = lorawan_setsockopt(skt, &mib);
-    if (status != LORAWAN_STATUS_OK) {
-        log_warn("failed to set data rate");
-        ret = false;
-    }
-    mib.Type = LORAWAN_ATTR_CHANNELS_TX_POWER;
-    mib.Param.ChannelsDefaultTxPower = ((14-_loraCfg.txPower)/2);        // lorawan stack power does 0-7, no one knows why
-    status = lorawan_setsockopt(skt, &mib);
-    if (status != LORAWAN_STATUS_OK) {
-        log_warn("failed to set tx power");
-        ret = false;
-    }
-    return ret;
+// get OS ms since boot
+static uint32_t getNowMS() {
+    return os_time_ticks_to_ms32(os_time_get());
 }
-*/
+// TODO use stack regional params functions to find max pkt size per SF per region
+static uint8_t maxSz4SF(int sf) {
+    return 52;
+}
+
 static struct os_event* allocEvent() {
     // Find an unused one in list
     struct os_event* ret = NULL;
@@ -292,15 +333,102 @@ static void loraapi_task(void* data) {
     assert(0);
 }
 
-static void execEvent(struct os_event* e) {
+static int mapSF2DR(int sf) {
+    switch(sf) {
+        case LORAWAN_SF12: 
+            return 0;
+        case LORAWAN_SF11: 
+            return 1;
+        case LORAWAN_SF10: 
+            return 2;
+        case LORAWAN_SF9: 
+            return 3;
+        case LORAWAN_SF8: 
+            return 4;
+        case LORAWAN_SF7: 
+            return 5;
+        case LORAWAN_FSK250: 
+            return 6;
+        default:
+            return 5;
+    }
+}
+/*
+static bool lora_check_send(uint8_t sz, LORAWAN_SF_t sf) {
+    LoRaMacTxInfo_t txInfo;
+    LoRaMacStatus_t txposs = LoRaMacQueryTxPossible( sz, &txInfo );
+    if (txposs == LORAMAC_STATUS_OK) {
+        return true;
+    }
+    return false;
+}
+*/
+static bool lora_send(uint8_t* data, uint8_t sz, uint8_t port, int sf, bool confirmed) {
+    McpsReq_t mcps_req;
+    if (confirmed) {
+        mcps_req.Type = MCPS_CONFIRMED;
+        mcps_req.Req.Confirmed.fPort = port;
+        mcps_req.Req.Confirmed.fBuffer = data;
+        mcps_req.Req.Confirmed.fBufferSize = sz;
+        mcps_req.Req.Confirmed.Datarate = mapSF2DR(sf);
+        mcps_req.Req.Confirmed.NbTrials = 1;            // only 1 try even if confrmed, app level can take care of retries
+    } else {
+        mcps_req.Type = MCPS_UNCONFIRMED;
+        mcps_req.Req.Unconfirmed.fPort = port;
+        mcps_req.Req.Unconfirmed.fBuffer = data;
+        mcps_req.Req.Unconfirmed.fBufferSize = sz;
+        mcps_req.Req.Unconfirmed.Datarate = mapSF2DR(sf);
+    }
+    LoRaMacStatus_t status = LoRaMacMcpsRequest( &mcps_req );
+    if(status == LORAMAC_STATUS_OK ) {
+        // Send started
+        return true;
+    }
+    log_debug("lora send fails %d", status);
+    return false;
+}
+
+// Ask stack to send JOIN request
+static bool lora_join(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, int sf) {
+    MlmeReq_t mlme_req;
+    mlme_req.Type = MLME_JOIN;
+    mlme_req.Req.Join.DevEui = devEUI;
+    mlme_req.Req.Join.AppEui = appEUI;
+    mlme_req.Req.Join.AppKey = appKey;
+    mlme_req.Req.Join.Datarate = mapSF2DR(sf);
+    LoRaMacStatus_t status = LoRaMacMlmeRequest(&mlme_req);
+    if(status == LORAMAC_STATUS_OK ) {
+        // Send started
+        return true;
+    }
+    log_debug("lora join fails %d", status);
+    return false;
+}
+static void execStackEvent(struct os_event* e) {
     LWEVT_t* evt = (LWEVT_t*)(e->ev_arg);
     switch(evt->type) {
         case LWEVT_TYPE_MCPS_CONFIRM: {
             McpsConfirm_t* McpsConfirm = &evt->msg.mcpsc;
             // Confirmation of sending of app level message
-            log_debug("MCPSconfirm: %d\r\n", McpsConfirm->AckReceived);
-            // TODO find guy who ordered tx and callback with result
-
+            log_debug("MCPSconfirm: tx status %d, %d\r\n", McpsConfirm->Status,McpsConfirm->AckReceived);
+            // find guy who ordered this tx and callback with result. As the stack doesn't take a context, we have to set flags (ick)
+            for(int i=0;i<MAX_TXCBS;i++) {
+                if (_loraCtx.txLoraWANReqs[i].txInProgress) {
+                    // record bits we need before doing callback, as this allows caller to immediately re-schedule a send and use same slot
+                    LORAWAN_TX_CB_t cb = _loraCtx.txLoraWANReqs[i].cbfn;
+                    void* userctx = _loraCtx.txLoraWANReqs[i].userctx;
+                    _loraCtx.txLoraWANReqs[i].txInProgress = false;
+                    _loraCtx.txLoraWANReqs[i].cbfn = NULL;
+                    // sucess?
+                    if (McpsConfirm->Status == LORAMAC_EVENT_INFO_STATUS_OK) {
+                        (*cb)(userctx, (LORAWAN_REQ_ID_t*)&_loraCtx.txLoraWANReqs[i],
+                            LORAWAN_RES_OK);
+                    } else {
+                        (*cb)(userctx, (LORAWAN_REQ_ID_t*)&_loraCtx.txLoraWANReqs[i],
+                            LORAWAN_RES_HWERR);
+                    }
+                }
+            }
             break;
         }
         case LWEVT_TYPE_MCPS_INDICATION: {
@@ -336,11 +464,18 @@ static void execEvent(struct os_event* e) {
 #endif
                 if( McpsIndication->Port != 0 ){
                     /* Search for a valid callbacks to forward payload */
-
+                    for(int i=0;i<MAX_RXCBS;i++) {
+                        if (_loraCtx.rxLoraWANReqs[i].cbfn!=NULL && 
+                            (_loraCtx.rxLoraWANReqs[i].port==-1 || _loraCtx.rxLoraWANReqs[i].port==McpsIndication->Port)) {
+                            (*_loraCtx.rxLoraWANReqs[i].cbfn)(_loraCtx.rxLoraWANReqs[i].userctx, (LORAWAN_REQ_ID_t)&_loraCtx.rxLoraWANReqs[i],
+                                LORAWAN_RES_OK, McpsIndication->Port, McpsIndication->Rssi, McpsIndication->Snr, 
+                                McpsIndication->Buffer, McpsIndication->BufferSize);
+                        }
+                    }
                 }
                 else{ 
                     /* Means that neither Fport, nor Payload, are in the frame -> ?? */
-
+                    // ignore
                 }
             }
             break;
@@ -350,14 +485,20 @@ static void execEvent(struct os_event* e) {
             // Could be a JOIN accept?
             switch(MlmeConfirm->MlmeRequest) {
                 case MLME_JOIN: {
+                    LORAWAN_RESULT_t res = LORAWAN_RES_NO_RESP;
                     if (MlmeConfirm->Status == LORAMAC_EVENT_INFO_STATUS_OK) {
                         log_debug("Join Accepted\r\n");
-                        // send event to signal this
-                        
-                        // TODO find join cb and call it to tell app we're joined
+                        _loraCtx.isJoin = true;
+                        res = LORAWAN_RES_JOIN_OK;
                     } else {
                         // badness
                         log_debug("JOIN failed %d",MlmeConfirm->Status);
+                        _loraCtx.isJoin = false;
+                    }
+                    // get join cb and call it to tell app we're joined
+                    if (_loraCtx.joinLoraWANReq.cbfn!=NULL) {
+                        (_loraCtx.joinLoraWANReq.cbfn)(_loraCtx.joinLoraWANReq.userctx, res);
+                        _loraCtx.joinLoraWANReq.cbfn=NULL;
                     }
                     break;
                 }
@@ -369,9 +510,25 @@ static void execEvent(struct os_event* e) {
             break;
         }
         case LWEVT_TYPE_MLME_INDICATION: {
-            MlmeIndication_t* MlmeIndication = &evt->msg.mlmei;
-            log_debug("MLMEind\r\n");
+            MlmeIndication_t* mlmeInd = &evt->msg.mlmei;
+            log_debug("MLMEind %D\r\n", mlmeInd->MlmeIndication);
             // Don't care about mac command DLs
+            break;
+        }
+
+        // Not strictly a stack upcall event..
+        case LWEVT_TYPE_DOJOIN: {
+            // try to send a JOIN request
+            if (lora_join(_loraCtx.deveui, _loraCtx.appeui, _loraCtx.appkey, _loraCtx.defaultSF)) {
+                // in progress
+            } else {
+                // oopsie
+                // tell awaiting joiner
+                if (_loraCtx.joinLoraWANReq.cbfn!=NULL) {
+                    (_loraCtx.joinLoraWANReq.cbfn)(_loraCtx.joinLoraWANReq.userctx, LORAWAN_RES_DUTYCYCLE);
+                    _loraCtx.joinLoraWANReq.cbfn=NULL;
+                }
+            }
             break;
         }
         default:{
@@ -382,6 +539,44 @@ static void execEvent(struct os_event* e) {
     freeEvent(e);
 }
 
+static void execTxLora(struct os_event* e) {
+    TxLoraWanReq_t* req = (TxLoraWanReq_t*)(e->ev_arg);
+    // Are we joined?
+    if (lora_api_isJoined()) {
+        // do send now
+        if (lora_send(req->data, req->sz, req->port, req->sf, req->contract.reqAck)) {
+            // yes, started tx. Will call sender back once tx done
+            req->txInProgress = true;       // this is sadly the only way to know which tx is in progress when we get the stack's callback for the result
+            // free timer callout?
+        } else {
+            // try to reschedule
+            if (!scheduleTxLoraWanReq(req)) {
+                // nok, couldnt schedule (normally coz out of time)
+                // tell sender we failed
+                (*req->cbfn)(req->userctx, (LORAWAN_REQ_ID_t*)req, LORAWAN_RES_OCC);
+                // free timer callout?
+            } // else we're waiting for next try and using the timer
+        }
+    } else {
+        // tell sender failed as no join
+        (*req->cbfn)(req->userctx, (LORAWAN_REQ_ID_t*)req, LORAWAN_RES_NOT_JOIN);
+    }
+}
+static void execTxRadio(struct os_event* e) {
+    TxRadioReq_t* req = (TxRadioReq_t*)(e->ev_arg);
+    // do send now
+    // TODO
+    // if fails tell sender the result
+    (*req->cbfn)(req->userctx, (LORAWAN_REQ_ID_t*)req, LORAWAN_RES_OCC);
+    // else we'll tell when radio send done
+}
+static void execRxRadio(struct os_event* e) {
+    RxRadioReq_t* req = (RxRadioReq_t*)(e->ev_arg);
+    // do rx now
+    // if fails tell caller the result
+    (*req->cbfn)(req->userctx, (LORAWAN_REQ_ID_t*)req, LORAWAN_RES_OCC, 0, 0, 0, NULL, 0);
+    // else we'll tell when radio done (rx or timeout)   
+}
 
 /**** Lorawan stack api callbacks. These are just copied into events and posted for execution by the task. */
 /* Primitive definitions used by the LoRaWAN */
@@ -467,8 +662,11 @@ static LoRaMacRegion_t lorawan_get_first_active_region( void ){
 }
 
 /*** initialisation */
-// initialise lorawan stack with our config
+// initialise lorawan stack with our config. Called by application before using stack.
 void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
+    // Ensure all 0s, makes sure cbfns etc all as unused etc
+    memset(&_loraCtx, 0, sizeof(_loraCtx));
+
     for(int i=0;i<8;i++) {
         _loraCtx.deveui[i] = devEUI[i];
     }
@@ -478,12 +676,26 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
     for(int i=0;i<16;i++) {
         _loraCtx.appkey[i] = appKey[i];
     }
+    _loraCtx.defaultSF = LORAWAN_SF10;
+    _loraCtx.defaultLWPower = 14;            // TODO - max for the region or ADRised
     // init events (mutex, q, each event in the pool)
     os_mutex_init(&_loraCtx.lwevts_mutex);
     for(int i=0;i<MAX_LWEVTS;i++) {
-        _loraCtx.lwevts[i].e.ev_cb = &execEvent;
+        _loraCtx.lwevts[i].e.ev_cb = &execStackEvent;
         _loraCtx.lwevts[i].e.ev_arg = &(_loraCtx.lwevts[i].lwevt);
         _loraCtx.lwevts[i].lwevt.type = LWEVT_TYPE_UNUSED;
+    }
+    for(int i=0;i<MAX_TXCBS;i++) {
+        TxLoraWanReq_t* req = &_loraCtx.txLoraWANReqs[i];
+        os_callout_init(&req->timer, &_loraCtx.lwevt_q, execTxLora, req);    
+    }
+    for(int i=0;i<MAX_TXRADIOCBS;i++) {
+        TxRadioReq_t* req = &_loraCtx.txRadioReqs[i];
+        os_callout_init(&req->timer, &_loraCtx.lwevt_q, execTxRadio, req);    
+    }
+    for(int i=0;i<MAX_RXRADIOCBS;i++) {
+        RxRadioReq_t* req = &_loraCtx.rxRadioReqs[i];
+        os_callout_init(&req->timer, &_loraCtx.lwevt_q, execRxRadio, req);    
     }
     os_eventq_init(&_loraCtx.lwevt_q);
     os_task_init(&_loraCtx.loraapi_task_str, "lw_eventq",
@@ -495,4 +707,5 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
     // Initialise stackforce lorawan stack
     LoRaMacStatus_t status = LoRaMacInitialization(&_lorawan_primitives, &_lorawan_callbacks,
                                    lorawan_get_first_active_region());
+    assert(status==LORAMAC_STATUS_OK);
 }

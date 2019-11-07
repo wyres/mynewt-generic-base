@@ -21,13 +21,13 @@ extern "C" {
 
 
 /* New api */
-typedef enum { LORAWAN_RES_OK, LORAWAN_RES_NOT_JOIN, LORAWAN_RES_NO_RESP, LORAWAN_RES_DUTYCYCLE, 
-                LORAWAN_RES_NO_BW, LORAWAN_RES_OCC, LORAWAN_RES_HWERR } LORAWAN_RESULT_t;
-typedef enum { LORAWAN_SF12, LORAWAN_SF11, LORAWAN_SF10, LORAWAN_SF9, LORAWAN_SF8, LORAWAN_SF7,	LORAWAN_FSK250, LORAWAN_SF_USEADR } LORAWAN_SF_t;
+typedef enum { LORAWAN_RES_OK, LORAWAN_RES_JOIN_OK, LORAWAN_RES_NOT_JOIN, LORAWAN_RES_NO_RESP, LORAWAN_RES_DUTYCYCLE, 
+                LORAWAN_RES_NO_BW, LORAWAN_RES_OCC, LORAWAN_RES_HWERR, LORAWAN_RES_TIMEOUT, LORAWAN_RES_BADPARAM } LORAWAN_RESULT_t;
+typedef enum { LORAWAN_SF12, LORAWAN_SF11, LORAWAN_SF10, LORAWAN_SF9, LORAWAN_SF8, LORAWAN_SF7,	LORAWAN_FSK250, LORAWAN_SF_USEADR, LORAWAN_SF_DEFAULT } LORAWAN_SF_t;
 typedef void* LORAWAN_REQ_ID_t;     // A request id. NULL means the request was failed
 typedef void (*LORAWAN_JOIN_CB_t)(void* userctx, LORAWAN_RESULT_t res);
 typedef void (*LORAWAN_TX_CB_t)(void* userctx, LORAWAN_REQ_ID_t txReq, LORAWAN_RESULT_t res);
-typedef void (*LORAWAN_RX_CB_t)(void* userctx, LORAWAN_REQ_ID_t rxReq, uint8_t port, int rssi, int snr, uint8_t* msg, uint8_t sz);
+typedef void (*LORAWAN_RX_CB_t)(void* userctx, LORAWAN_REQ_ID_t rxReq, LORAWAN_RESULT_t res, uint8_t port, int rssi, int snr, uint8_t* msg, uint8_t sz);
 typedef struct {
 	bool reqAck;
 	bool doRx;
@@ -39,7 +39,7 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey);   // Call
 
 bool lora_api_isJoined();
 
- // Do the join (if already joined, returns this status to the callback)
+ // Do the join (if already joined, returns this status)
 LORAWAN_RESULT_t lora_api_join(LORAWAN_JOIN_CB_t callback, LORAWAN_SF_t sf, void* userctx);
 
 // register callback to deal with packets received on specific port (or -1 for all ports)
@@ -51,7 +51,7 @@ LORAWAN_REQ_ID_t lora_api_registerRxCB(int port, LORAWAN_RX_CB_t callback, void*
 // contract is ctype (eg anytime, within next X, at absolute/relative time), and time
 // data is COPIED during call, caller can reuse buffer
 // Returns id for the tx (will be used in callback) or NULL if not scheduled because tx queue is full
-LORAWAN_REQ_ID_t lora_api_send(LORAWAN_SF_t sf, uint8_t port, LORAWAN_TX_CONTRACT_t contract, 
+LORAWAN_REQ_ID_t lora_api_send(LORAWAN_SF_t sf, uint8_t port, LORAWAN_TX_CONTRACT_t* contract, 
                 uint8_t* data, uint8_t sz, LORAWAN_TX_CB_t callback, void* userctx);
 
 // Schedule direct radio tx access for specific time

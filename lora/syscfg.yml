@@ -1,7 +1,7 @@
 syscfg.defs:
     # task priorities : lower is higher priority : NOTE : MUST NOT HAVE 2 TASKS WITH SAME PRIO OR SYSTEM FAULT
     # redefine in target sys.yml to ensure uniqueness with rest of your app
-    LORA_TASK_PRIO:
+    LORAAPI_TASK_PRIO:
         description: "lorawan wrapper task priority"
         value: -1       #51
 

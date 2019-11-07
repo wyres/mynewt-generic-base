@@ -27,7 +27,17 @@ pkg.keywords:
 pkg.deps:
     - "@apache-mynewt-core/kernel/os"
     - "@apache-mynewt-core/hw/hal"
+#    - "@apache-mynewt-core/hw/drivers/lora/sx1272"
+#    - "@apache-mynewt-core/net/lora/node"
+    - "@lorawan/lorawan_api"
     - "@lorawan/lorawan_wrapper"
 
-pkg.init:
-    lora_init : 50
+pkg.cflags:
+    - -std=c99
+    - -I@lorawan/lorawan_wrapper/mynewt_board/include
+    - -I@lorawan/lorawan_wrapper/loramac_node_stackforce/src/mac
+    - -I@lorawan/lorawan_wrapper/loramac_node_stackforce/src/radio
+    - -I@lorawan/lorawan_wrapper/loramac_node_stackforce/src/boards
+    - -I@lorawan/lorawan_wrapper/loramac_node_stackforce/src/system
+
+
