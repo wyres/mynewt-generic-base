@@ -18,28 +18,15 @@
 #
 
 #pkg.type: pkg
-pkg.name: "generic"
-pkg.description: "Utility and core modules for Wyres firmware"
+pkg.name: "loraapi_KLK"
+pkg.description: "LoRaWAN api layer on top on KLK wrapper"
 pkg.author: "support@wyres.fr"
 pkg.homepage: "http://www.wyres.fr/"
 pkg.keywords:
 
 pkg.deps:
-    - "@apache-mynewt-core/kernel/os"
-    - "@apache-mynewt-core/hw/hal"
-    - "@wyres-gitlab-mynewt-bsp/w_base"
-
-pkg.deps.LOG_UART_ENABLED:
-    - "@apache-mynewt-core/hw/drivers/uart/uart_bitbang"
+    - "@generic/generic"
+    - "@lorawan/lorawan_api"
+    - "@lorawan/lorawan_wrapper"
 
 pkg.init:
-    CFMgr_init : 100
-    reboot_init : 101
-    gpio_mgr_init : 102
-    led_mgr_init : 103
-    uart_selector_init : 104
-    uart_line_comm_init : 105
-    wlog_init : 106      # must be after uart line init
-#    movement_init : 106
-    SRMgr_init: 107
-    init_sm_exec : 110

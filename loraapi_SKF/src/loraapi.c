@@ -11,12 +11,13 @@
  * language governing permissions and limitations under the License.
 */
 
+/* loraapi implmementation using direct access to the stackforce apis. */
 #include <string.h>
 
 #include "os/os.h"
 
 #include "wyres-generic/wutils.h"
-#include "lora/loraapi.h"
+#include "loraapi/loraapi.h"
 #include "LoRaMac.h"
 
 #define LORAAPI_TASK_PRIO       MYNEWT_VAL(LORAAPI_TASK_PRIO)
@@ -709,3 +710,24 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
                                    lorawan_get_first_active_region());
     assert(status==LORAMAC_STATUS_OK);
 }
+
+/*
+
+    mibReq.Type = MIB_NETWORK_JOINED;
+    mibReq.Param.IsNetworkJoined = false;
+    status |= LoRaMacMibSetRequestConfirm( &mibReq );
+
+    mibReq.Type = MIB_CHANNELS_TX_POWER;
+    mibReq.Param.ChannelsTxPower = tx_pow;
+    status |= LoRaMacMibSetRequestConfirm( &mibReq );
+
+    mibReq.Type = MIB_CHANNELS_NB_REP;
+    mibReq.Param.ChannelNbRep = nb_rep;
+    status |= LoRaMacMibSetRequestConfirm( &mibReq );
+
+#if MYNEWT_VAL(SX1272) || MYNEWT_VAL(SX1276)
+    mibReq.Type = MIB_SYSTEM_MAX_RX_ERROR;
+    mibReq.Param.SystemMaxRxError = (MYNEWT_VAL(SX127X_RADIO_MIN_RX_DURATION))/2;
+    status |= LoRaMacMibSetRequestConfirm( &mibReq );
+#endif
+ */

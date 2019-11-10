@@ -7,9 +7,6 @@ syscfg.defs:
     L96COMM_TASK_PRIO:
         description: "L96 comm driver task priority"
         value: -1       #103
-    LORAAPP_TASK_PRIO:
-        description: "Wyres lorawan wrapper task priority"
-        value: -1       #102
     LEDMGR_TASK_PRIO:
         description: "led manager task priority"
         value: -1       #19

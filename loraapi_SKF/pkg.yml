@@ -18,18 +18,14 @@
 #
 
 #pkg.type: pkg
-pkg.name: "lora"
-pkg.description: "Lora WAN and radio access api"
+pkg.name: "loraapi_SKF"
+pkg.description: "Lora WAN and radio access api on top of stackforce api"
 pkg.author: "support@wyres.fr"
 pkg.homepage: "http://www.wyres.fr/"
 pkg.keywords:
 
 pkg.deps:
-    - "@apache-mynewt-core/kernel/os"
-    - "@apache-mynewt-core/hw/hal"
-#    - "@apache-mynewt-core/hw/drivers/lora/sx1272"
-#    - "@apache-mynewt-core/net/lora/node"
-    - "@lorawan/lorawan_api"
+    - "@generic/generic"
     - "@lorawan/lorawan_wrapper"
 
 pkg.cflags:

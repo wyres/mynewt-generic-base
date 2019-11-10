@@ -1,0 +1,6 @@
+syscfg.defs:
+    LORAAPI_TASK_PRIO:
+        description: "Wyres lorawan api task priority"
+        value: -1       #102
+
+syscfg.vals:
