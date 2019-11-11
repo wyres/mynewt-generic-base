@@ -541,7 +541,26 @@ static void stack_joinTXUL_cb(void* uctx, LORAWAN_RESULT_t res) {
     }
 
 }
-static uint8_t _joinUL[4];
+
+// KLK api means must do UL to force JOIN. Kind of annoying but might as well make it useful
+// This cannot include directly the appcore message format in app_msg.h to avoid dependancies, but we'll make something similair
+//	0 : b0-3: ULrespid, b4-5: protocol version, b6: 1=listening for DL, 0=not listening, b7: force even parity for this byte
+//	1 : length of following TLV block = 6
+// 2/3 : T=0, L=4
+// 4-7 : uptime in ms
+static struct {
+    uint8_t h1;
+    uint8_t h2;
+    uint8_t t;
+    uint8_t l;
+    uint32_t uptime;
+} _joinUL = {
+    .h1=0x50,       // respId=0, version=1, not listening for DL, even parity
+    .h2=6,          // 6 bytes to follow
+    .t=1,           // tag 1 = uptime (in appcore.h)
+    .l=4,           // length of value is 4 bytes
+};
+
 // Try to JOIN. Caller should check beforehand if we are already joined....
 static bool do_lora_join(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, LORAWAN_SF_t sf, bool doADR) {
     // no explicit join phase currently with KLK wrapper. 
@@ -549,9 +568,9 @@ static bool do_lora_join(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, LORA
     TxLoraWanReq_t* req = &_loraCtx.txLoraWANReq;
     req->cbfn = stack_joinTXUL_cb;
     // put current time in UL message?
-    *((uint32_t*)_joinUL) = TMMgr_getTime();
-    req->data = _joinUL;
-    req->sz = 4;        // we send just our uptime
+    _joinUL.uptime = TMMgr_getTime();
+    req->data = (uint8_t*)(&_joinUL);
+    req->sz = sizeof(_joinUL);        // we send just our uptime
     req->port = 1;
     req->sf = sf;
     req->power = _loraCtx.defaultLWPower;  

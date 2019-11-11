@@ -20,46 +20,48 @@ extern "C" {
 #endif
 
 
-/* New api */
+/* LoraWAN and LoRa radio access api */
 typedef enum { LORAWAN_RES_OK, LORAWAN_RES_JOIN_OK, LORAWAN_RES_NOT_JOIN, LORAWAN_RES_NO_RESP, LORAWAN_RES_DUTYCYCLE, 
-                LORAWAN_RES_NO_BW, LORAWAN_RES_OCC, LORAWAN_RES_HWERR, LORAWAN_RES_TIMEOUT, LORAWAN_RES_BADPARAM } LORAWAN_RESULT_t;
-typedef enum { LORAWAN_SF12, LORAWAN_SF11, LORAWAN_SF10, LORAWAN_SF9, LORAWAN_SF8, LORAWAN_SF7,	LORAWAN_FSK250, LORAWAN_SF_USEADR, LORAWAN_SF_DEFAULT } LORAWAN_SF_t;
+                LORAWAN_RES_NO_BW, LORAWAN_RES_OCC, LORAWAN_RES_HWERR, LORAWAN_RES_FWERR, LORAWAN_RES_TIMEOUT, LORAWAN_RES_BADPARAM } LORAWAN_RESULT_t;
+typedef enum { LORAWAN_SF12=12, LORAWAN_SF11=11, LORAWAN_SF10=10, LORAWAN_SF9=9, LORAWAN_SF8=8, LORAWAN_SF7=7,	LORAWAN_FSK250=5, LORAWAN_SF_USEADR=13, LORAWAN_SF_DEFAULT=14 } LORAWAN_SF_t;
 typedef void* LORAWAN_REQ_ID_t;     // A request id. NULL means the request was failed
 typedef void (*LORAWAN_JOIN_CB_t)(void* userctx, LORAWAN_RESULT_t res);
-typedef void (*LORAWAN_TX_CB_t)(void* userctx, LORAWAN_REQ_ID_t txReq, LORAWAN_RESULT_t res);
-typedef void (*LORAWAN_RX_CB_t)(void* userctx, LORAWAN_REQ_ID_t rxReq, LORAWAN_RESULT_t res, uint8_t port, int rssi, int snr, uint8_t* msg, uint8_t sz);
-typedef struct {
-	bool reqAck;
-	bool doRx;
-	bool priority;
-	uint32_t txTimePeriodSecs;      // Do tx in next X seconds please (0=asap)
-    } LORAWAN_TX_CONTRACT_t;
+typedef void (*LORAWAN_TX_CB_t)(void* userctx, LORAWAN_RESULT_t res);
+typedef void (*LORAWAN_RX_CB_t)(void* userctx, LORAWAN_RESULT_t res, uint8_t port, int rssi, int snr, uint8_t* msg, uint8_t sz);
 
+// Initialise the api usage. No other api call should be made before this is done (assert condition)
 void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey);   // Called from app
 
+// Is the lorawan layer 'joined' (ie a successful JOIN ACCEPT was received)
 bool lora_api_isJoined();
 
- // Do the join (if already joined, returns this status)
+ // Do the join (if already joined, returns LORAWAN_RES_JOIN_OK status)
 LORAWAN_RESULT_t lora_api_join(LORAWAN_JOIN_CB_t callback, LORAWAN_SF_t sf, void* userctx);
 
 // register callback to deal with packets received on specific port (or -1 for all ports)
 // data buffer given during callback will be valid only during callback (which must not block)
-// Returns request id, which can be used to cancel this registration at a later point
-LORAWAN_REQ_ID_t lora_api_registerRxCB(int port, LORAWAN_RX_CB_t callback, void* userctx);	// calls the cb whenever pkt rxed (whether on classA, B, or C)
+// Returns result code. To cancel this registration at a later point use the lora_api_cancelRxCB() with the same port/cbfn
+LORAWAN_RESULT_t lora_api_registerRxCB(int port, LORAWAN_RX_CB_t callback, void* userctx);	// calls the cb whenever pkt rxed (whether on classA, B, or C)
+void lora_api_cancelRxCB(int port, LORAWAN_RX_CB_t callback);
 
-// schedule a tx for time determined by <contract>
-// contract is ctype (eg anytime, within next X, at absolute/relative time), and time
-// data is COPIED during call, caller can reuse buffer
-// Returns id for the tx (will be used in callback) or NULL if not scheduled because tx queue is full
-LORAWAN_REQ_ID_t lora_api_send(LORAWAN_SF_t sf, uint8_t port, LORAWAN_TX_CONTRACT_t* contract, 
+// request an UL. This will be sent 'as soon as possible' async to this call
+// data buffer should be maintained as-is until the callback happens to release it.
+// Note that no other lorawan tx may be done until the callback has happened to signal end of this one. This will be when
+// either the tx fails, tx completes successfullly (if doRx=false), or either a DL is rx'd (RX1 or RX2) or RX2 timeout has popped.
+// The returned result indicates if the request is accepted or not (failure because eg join not done, or the radio is already in use 
+// (or scheduled to be in use by a 'radio_tx/rx' request, in the time frame of the tx/rx exchange))
+LORAWAN_RESULT_t lora_api_send(LORAWAN_SF_t sf, uint8_t port, bool reqAck, bool doRx, 
                 uint8_t* data, uint8_t sz, LORAWAN_TX_CB_t callback, void* userctx);
 
-// Schedule direct radio tx access for specific time
+// Schedule direct radio tx access for specific time. The callback will be done following the access. Set abs_time to 0 to mean 'now'
+// Not yet implmented.
 LORAWAN_REQ_ID_t lora_api_radio_tx(uint32_t abs_time, LORAWAN_SF_t sf, uint32_t freq, int txpower, uint8_t* data, uint8_t sz, LORAWAN_TX_CB_t callback, void* userctx);
-// Schedule direct radio rx access for specific time
+// Schedule direct radio rx access for specific time. The callback will be done following the access. Set abs_time to 0 to mean 'now'
+// Not yet implmented.
 LORAWAN_REQ_ID_t lora_api_radio_rx(uint32_t abs_time, LORAWAN_SF_t sf, uint32_t freq, uint32_t timeoutms, uint8_t* data, uint8_t sz, LORAWAN_RX_CB_t callback, void* userctx);
 
-// Cancel a pending request. True if cancelled without action, false if already in progress and cannot be cancelled
+// Cancel a pending radio direct request. True if cancelled without action, false if already in progress and cannot be cancelled
+// Not yet implmented.
 bool lora_api_cancel(LORAWAN_REQ_ID_t id);
 
 #ifdef __cplusplus
