@@ -29,6 +29,7 @@
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/configmgr.h"
 #include "wyres-generic/timemgr.h"
+#include "wyres-generic/lowpowermgr.h"
 #include "loraapi/loraapi.h"
 // Kerlink lorawan api
 #include "lorawan_api/lorawan_api.h"
@@ -649,6 +650,22 @@ static void execRxRadio(struct os_event* e) {
     log_warn("LW:direct radio requested but not yet implemented");
 }
 
+// Callback from low power manager about change of mode
+static void lp_change(LP_MODE prevmode, LP_MODE newmode) {
+    // Radio is ON in all modes except DEEPSLEEP
+    if (prevmode>=LP_DEEPSLEEP && newmode <LP_DEEPSLEEP) {
+        // wake up radio - init its periphs
+        log_debug("LW:wakeup");
+        // TODO find KLK api to do this?
+        // lorawan_init();         // in board_utils.c
+    } else if (prevmode<LP_DEEPSLEEP && newmode >= LP_DEEPSLEEP) {
+        // shutdown radio - reset its periphs, deinit spi etc
+        log_debug("LW:sleep");
+        // TODO
+        // lorawan_deinit();         // not yet in board_utils.c
+    }
+}
+
 // initialise lorawan stack with our config. Called by application before using stack.
 void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
     // Ensure all 0s, makes sure cbfns etc all as unused etc
@@ -726,12 +743,15 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
     _loraCtx.sock_rx = lorawan_socket(SOCKET_TYPE_RX);
     assert(_loraCtx.sock_rx > 0);
 
-    // Create task to run TX/RX as KLK wrapper uses blocking calls... thanks guys...
+    // Create task to run TX/RX as KLK wrapper uses blocking calls... 
     os_task_init(&_loraCtx.loraapi_task_str, "lw_eventq",
                  loraapi_task, NULL,
                  LORAAPI_TASK_PRIO, OS_WAIT_FOREVER,
                  _loraCtx.loraapi_task_stack,
                  LORAAPI_TASK_STACK_SZ);
+    // register with lowpowermgr to know when to deinit/init the radio
+    LPMgr_register(lp_change);
+
     // ok lorawan api all init ok
     log_info("LW: cfgd [%02x%02x%02x%02x%02x%02x%02x%02x]",
             _loraCtx.deveui[0],_loraCtx.deveui[1],_loraCtx.deveui[2],_loraCtx.deveui[3],_loraCtx.deveui[4],_loraCtx.deveui[5],_loraCtx.deveui[6],_loraCtx.deveui[7]);

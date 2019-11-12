@@ -32,8 +32,12 @@ typedef void (*LP_CBFN_t)(LP_MODE prevmode, LP_MODE newmode);
 void LPMgr_register(LP_CBFN_t cb);
 // THe level of sleeping when someone asks to enter low power mode
 void LPMgr_setLPMode(LP_MODE m);
+// if OS delegates the sleeping (including WFI)
 // goto sleep until either an IRQ/timer (if enabled in the mode used) or (max) the wakeupTimeoutMs time has passed
 void LPMgr_sleep(uint32_t wakeupTimeoutMs);
+// if OS wraps the enter/exit of sleep mode
+void LPMgr_entersleep();
+void LPMgr_exitsleep();
 
 #ifdef __cplusplus
 }

@@ -20,6 +20,7 @@
 #include "hal/hal_i2c.h"
 
 #include "wyres-generic/wutils.h"
+#include "wyres-generic/lowpowermgr.h"
 
 #include "wyres-generic/movementmgr.h"
 #include "wyres-generic/timemgr.h"
@@ -47,6 +48,18 @@ static struct {
     MM_ORIENT orientation;
 } _ctx;
 
+// low power state change callback
+void lp_change(LP_MODE prev, LP_MODE new) {
+    if (new>=LP_DEEPSLEEP) {
+        ACC_sleep();
+        // deinit I2C in BSP?
+        // TODO
+    } else {
+        // init I2C in BSP?
+        ACC_activate();
+    }
+}
+
 void movement_init(void) {
     // clear context
     memset(&_ctx, 0, sizeof(_ctx));
@@ -60,7 +73,7 @@ void movement_init(void) {
     // start timer for checks? or register with a "callmeWhenAwakeANyway" service?
 
     // register with LP mgr to get called on changes, to deinit/init the I2C
-    // TODO
+    LPMgr_register(lp_change);
 }
 
 bool MMMgr_registerMovementCB(MM_CBFN_t cb) {

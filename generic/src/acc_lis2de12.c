@@ -254,6 +254,7 @@ static bool LIS2DE12_WriteMaskedRegister(uint8_t register_addr, uint8_t mask, bo
 
     return LIS2DE12_WriteReg(register_addr, tmp);
 }
+
 // interface to accelero - rewrite to use sensor device driver?
 bool ACC_init() {
     uint8_t data = 0;
