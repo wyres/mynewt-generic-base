@@ -67,6 +67,7 @@ static int findLEDRef(int8_t gpio_pin);
 static uint32_t makeBinaryFromString(const char* binary);
 static void led_mgr_task(void* arg);
 static void ledActive();
+static void lp_change(LP_MODE oldmode, LP_MODE newmode);
 
 // Called from sysinit via reference in pkg.yml
 void led_mgr_init(void) {
@@ -75,6 +76,8 @@ void led_mgr_init(void) {
     // Create the led handler task
     os_task_init(&_led_task_str, "led_task", &led_mgr_task, NULL, LED_TASK_PRIO,
                  OS_WAIT_FOREVER, _led_task_stack, LED_TASK_STACK_SZ);
+    // listen for lowpower entry to deep sleep - we cancel running leds when this happens
+    LPMgr_register(lp_change);
 }
 
 // Public API
@@ -261,3 +264,18 @@ static int findLEDRef(int8_t gpio_pin) {
     }
     return -1;
 }
+// LOw power mode change
+static void lp_change(LP_MODE oldmode, LP_MODE newmode) {
+    if (newmode>=LP_DEEPSLEEP) {
+        log_debug("LM:sleep");
+        // stop any running LEDs
+        for(int r=0;r<_ledRefsSz;r++) {
+            _leds[r].active=false;
+            // Ensure no timer running
+            stopLEDTimer(r);
+        }
+    } else {
+        log_debug("LM:wake");
+    }
+}
+

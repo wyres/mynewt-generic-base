@@ -125,6 +125,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
             // Power up using power pin
             if (ctx->pwrPin>=0) {
                 log_debug("GPS: ON pin %d", ctx->pwrPin);
+                // TODO add a battery check before and after power on as this could be nice to detect battery end of life
                 GPIO_write(ctx->pwrPin, 0);     // yup pull down for ON
             } else {
                 log_debug("GPS: no gps power control");

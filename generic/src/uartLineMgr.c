@@ -28,6 +28,7 @@
 #include "wyres-generic/wskt_driver.h"
 #include "wyres-generic/circbuf.h"
 #include "wyres-generic/uartselector.h"
+#include "wyres-generic/ledmgr.h"
 
 // If got a separate debug uart line, then allowed to do real logs in here, otherwise its the debugger only version that does actually output!
 #define log_uartbdg log_noout_fn
@@ -64,6 +65,7 @@ static int uart_line_close(wskt_t* skt);
 static int uart_rx_cb(void*, uint8_t c);
 //static void uart_tx_ready(void* ctx);
 static int uart_tx_cb(void* ctx);
+static void lp_change(LP_MODE p, LP_MODE n);
 
 static wskt_devicefns_t _myDevice = {
     .open = &uart_line_open,
@@ -80,6 +82,9 @@ static struct os_mutex _lbMutex;
 void uart_line_comm_init(void) {
     // TODO should we use mempools to handle per-device structures?
     os_mutex_init(&_lbMutex);
+        // listen for lowpower entry to deep sleep and vice versa - we deinit/init uarts when this happens
+    LPMgr_register(lp_change);
+
 }
 
 // Create uart device with given name (used as my dev name and also the mynewt device to open), at given baud rate
@@ -356,3 +361,13 @@ static void uart_tx_ready(void* ctx) {
     circ_bbuf_push(&(myCfg->txBuff), c);
 }
 */
+// LOw power mode change - disable UART device(s) in deep low power
+static void lp_change(LP_MODE oldmode, LP_MODE newmode) {
+    if (newmode>=LP_DEEPSLEEP) {
+        log_debug("UM:sleep");
+        // TODO need to call all devices to deinit their hw
+    } else {
+        log_debug("UM:wake");
+        // TODO and here to reinit it...
+    }
+}

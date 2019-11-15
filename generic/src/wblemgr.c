@@ -92,6 +92,7 @@ static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
     
             if (ctx->pwrPin>=0) {
                 log_debug("BLE: OFF pin %d", ctx->pwrPin);
+                // TODO add a battery check before and after power on as this could be nice to detect battery end of life
                 GPIO_write(ctx->pwrPin, 1);     // yup pull UP for OFF
             } else {
                 log_debug("BLE: always on?");

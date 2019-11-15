@@ -43,3 +43,5 @@ pkg.init:
 #    movement_init : 106
     SRMgr_init: 107
     init_sm_exec : 110
+    LPMgr_init: 111     # hook WFI sleeping
+    

@@ -32,6 +32,12 @@ static struct lp_ctx {
     .sleepMode=LP_SLEEP,
 };
 
+// Initialise low power manager
+void LPMgr_init(void) {
+    // Hook OS enter/exit of WFI???
+    // TODO
+}
+
 // Register to be told when we change mode
 void LPMgr_register(LP_CBFN_t cb) {
     assert(_ctx.deviceCnt < MAX_LPCBFNS);
