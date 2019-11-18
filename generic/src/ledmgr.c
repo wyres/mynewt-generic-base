@@ -57,6 +57,7 @@ static struct os_task _led_task_str;
 static struct s_ledref _leds[MAX_LEDS];     // TODO use mempools
 static uint8_t _ledRefsSz = 0;
 static struct os_sem _ledActiveSema;
+static LP_ID_t _lpUserId;
 
 // predefine private fns
 static int checkLED(int8_t gpio);
@@ -67,7 +68,7 @@ static int findLEDRef(int8_t gpio_pin);
 static uint32_t makeBinaryFromString(const char* binary);
 static void led_mgr_task(void* arg);
 static void ledActive();
-static void lp_change(LP_MODE oldmode, LP_MODE newmode);
+static void lp_change(LP_MODE_t oldmode, LP_MODE_t newmode);
 
 // Called from sysinit via reference in pkg.yml
 void led_mgr_init(void) {
@@ -77,7 +78,7 @@ void led_mgr_init(void) {
     os_task_init(&_led_task_str, "led_task", &led_mgr_task, NULL, LED_TASK_PRIO,
                  OS_WAIT_FOREVER, _led_task_stack, LED_TASK_STACK_SZ);
     // listen for lowpower entry to deep sleep - we cancel running leds when this happens
-    LPMgr_register(lp_change);
+    _lpUserId = LPMgr_register(lp_change);
 }
 
 // Public API
@@ -224,9 +225,11 @@ static void led_mgr_task(void* arg) {
         }
         // wait 100ms to change led states IFF led pattern running, else wait on semaphore for new request
         if (patternActive) {
+            LPMgr_setLPMode(_lpUserId, LP_SLEEP);       // don't want deep sleep if leds running...
             /* Wait 100ms (or 1second divided by the number of time slices per sec) - this yields the CPU */
             os_time_delay(OS_TICKS_PER_SEC/LED_SLICES_PER_SEC);
         } else {
+            LPMgr_setLPMode(_lpUserId, LP_OFF);       // ok with off as no leds to light
             // wait until a new led request arrives (so can sleep)
             os_sem_pend(&_ledActiveSema, OS_TIMEOUT_NEVER);
 //            os_time_delay(OS_TICKS_PER_SEC/LED_SLICES_PER_SEC);
@@ -265,9 +268,9 @@ static int findLEDRef(int8_t gpio_pin) {
     return -1;
 }
 // LOw power mode change
-static void lp_change(LP_MODE oldmode, LP_MODE newmode) {
+static void lp_change(LP_MODE_t oldmode, LP_MODE_t newmode) {
     if (newmode>=LP_DEEPSLEEP) {
-        log_debug("LM:sleep");
+        log_debug("LM:deepsleep");
         // stop any running LEDs
         for(int r=0;r<_ledRefsSz;r++) {
             _leds[r].active=false;
@@ -275,7 +278,7 @@ static void lp_change(LP_MODE oldmode, LP_MODE newmode) {
             stopLEDTimer(r);
         }
     } else {
-        log_debug("LM:wake");
+        log_debug("LM:leds allowed");
     }
 }
 

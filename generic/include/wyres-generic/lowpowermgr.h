@@ -21,23 +21,25 @@ extern "C" {
 
 /** Low power sleep modes, in order of increasing sleepness (ie lower power coz more stuff is off)
  * RUN : normal operation
- * DOZE : only CPU core is stopped (STM32L151CC 'Sleep mode')
+ * DOZE : only CPU core is stopped for WFI (STM32L151CC 'Sleep mode')
  * SLEEP : CPU core + as many periphs off as possible (using info provided by the user of the periph) ('Low-power sleep mode')
  * DEEP_SLEEP : only RAM /RTC retained - all periphs are off. ('Stop mode with RTC')
- * OFF : all off, restart via RTC or reset ('Standby mode with RTC')
+ * OFF : everything off except RTC, wakeup via RTC or reset is via reboot ('Standby mode with RTC')
  */ 
-typedef enum  { LP_RUN, LP_DOZE, LP_SLEEP, LP_DEEPSLEEP, LP_OFF } LP_MODE;
-typedef void (*LP_CBFN_t)(LP_MODE prevmode, LP_MODE newmode);
-// Register to be told when entering or leaving sleep
-void LPMgr_register(LP_CBFN_t cb);
-// THe level of sleeping when someone asks to enter low power mode
-void LPMgr_setLPMode(LP_MODE m);
-// if OS delegates the sleeping (including WFI)
-// goto sleep until either an IRQ/timer (if enabled in the mode used) or (max) the wakeupTimeoutMs time has passed
-void LPMgr_sleep(uint32_t wakeupTimeoutMs);
+typedef enum  { LP_RUN, LP_DOZE, LP_SLEEP, LP_DEEPSLEEP, LP_OFF } LP_MODE_t;
+typedef uint8_t LP_ID_t;
+typedef void (*LP_CBFN_t)(LP_MODE_t prevmode, LP_MODE_t newmode);
+typedef int (*LP_HOOK_t)();
+
+// Register as a low power actor, to be able to set desired power mode, and to be told when entering or leaving sleep
+LP_ID_t  LPMgr_register(LP_CBFN_t cb);
+// THe level of sleeping when someone asks to enter low power mode. Each actor sets the appropriate mode for their current operations,
+// and the LPM takes the 'worst' case when doing sleeps
+// TODO should there be a way to FORCE a lp mode (override other users of LPM?)
+void LPMgr_setLPMode(LP_ID_t id, LP_MODE_t m);
 // if OS wraps the enter/exit of sleep mode
-void LPMgr_entersleep();
-void LPMgr_exitsleep();
+int LPMgr_entersleep();
+int LPMgr_exitsleep();
 
 #ifdef __cplusplus
 }

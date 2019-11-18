@@ -40,22 +40,23 @@ typedef struct gpio {
     bool irqEn;
     hal_gpio_irq_trig_t trig;
     hal_gpio_pull_t pull;
-    LP_MODE lpmode;
+    LP_MODE_t lpmode;
     bool lpEnabled;
     char name[GPIO_NAME_SZ+1];
-} GPIO;
+} GPIO_t;
 
-static GPIO _gpios[MAX_GPIOS];
+static GPIO_t _gpios[MAX_GPIOS];
 static struct os_mutex _gpiomutex;
+static LP_ID_t _lpUserId;
 
 // function predefs
-static GPIO* findGPIO(int8_t p);
-static GPIO* allocGPIO(int8_t p);
-static void releaseGPIO(GPIO* g);
-static void onLPModeChange(LP_MODE current, LP_MODE next);
+static GPIO_t* findGPIO(int8_t p);
+static GPIO_t* allocGPIO(int8_t p);
+static void releaseGPIO(GPIO_t* g);
+static void onLPModeChange(LP_MODE_t current, LP_MODE_t next);
 static void checkForNoADC();
-static void init_hal(GPIO* p);
-static void deinit_hal(GPIO* p);
+static void init_hal(GPIO_t* p);
+static void deinit_hal(GPIO_t* p);
 
 void gpio_mgr_init(void) {
     // Initialise gpio array
@@ -68,13 +69,13 @@ void gpio_mgr_init(void) {
     os_mutex_init(&_gpiomutex);
 
     // Register with LP manager to get callback whenever LP mode changes
-    LPMgr_register(&onLPModeChange);
+    _lpUserId = LPMgr_register(&onLPModeChange);
 }
 
 // Define a gpio OUTPUT pin, with a name, an initial value, and the highest lowpower mode it should be active in
-void* GPIO_define_out(const char* name, int8_t pin, uint8_t initialvalue, LP_MODE offmode) {
+void* GPIO_define_out(const char* name, int8_t pin, uint8_t initialvalue, LP_MODE_t offmode) {
     // already setup?
-    GPIO* p = allocGPIO(pin);
+    GPIO_t* p = allocGPIO(pin);
     if (p!=NULL) {
         strncpy(p->name, name, GPIO_NAME_SZ);
         p->type = GPIO_OUT;
@@ -86,9 +87,9 @@ void* GPIO_define_out(const char* name, int8_t pin, uint8_t initialvalue, LP_MOD
     return p;
 }
 
-void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MODE offmode) {
+void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MODE_t offmode) {
         // already setup?
-    GPIO* p = allocGPIO(pin);
+    GPIO_t* p = allocGPIO(pin);
     if (p!=NULL) {
         strncpy(p->name, name, GPIO_NAME_SZ);
         p->type = GPIO_IN;
@@ -102,9 +103,9 @@ void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MOD
 
 }
 
-void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE offmode) {
+void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offmode) {
     // already setup?
-    GPIO* p = allocGPIO(pin);
+    GPIO_t* p = allocGPIO(pin);
     if (p!=NULL) {
 
         strncpy(p->name, name, GPIO_NAME_SZ);
@@ -118,9 +119,9 @@ void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE offmod
     return p;
 
 }
-void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handler, void * arg, hal_gpio_irq_trig_t trig, hal_gpio_pull_t pull, LP_MODE offmode) {
+void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handler, void * arg, hal_gpio_irq_trig_t trig, hal_gpio_pull_t pull, LP_MODE_t offmode) {
     // already setup?
-    GPIO* p = allocGPIO(pin);
+    GPIO_t* p = allocGPIO(pin);
     if (p!=NULL) {
         strncpy(p->name, name, GPIO_NAME_SZ);
         p->type = GPIO_IRQ;
@@ -138,7 +139,7 @@ void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handl
 
 }
 void GPIO_release(int8_t pin) {
-    GPIO* p = findGPIO(pin);
+    GPIO_t* p = findGPIO(pin);
     if(p!=NULL) {
         deinit_hal(p);
         releaseGPIO(p);
@@ -147,7 +148,7 @@ void GPIO_release(int8_t pin) {
 
 
 void GPIO_irq_enable(int8_t pin) {
-    GPIO* p = findGPIO(pin);
+    GPIO_t* p = findGPIO(pin);
     assert(p!=NULL);
     assert(p->type==GPIO_IRQ);
     p->irqEn = true;
@@ -156,7 +157,7 @@ void GPIO_irq_enable(int8_t pin) {
     }
 }
 void GPIO_irq_disable(int8_t pin) {
-    GPIO* p = findGPIO(pin);
+    GPIO_t* p = findGPIO(pin);
     assert(p!=NULL);
     assert(p->type==GPIO_IRQ);
     p->irqEn = false;
@@ -166,7 +167,7 @@ void GPIO_irq_disable(int8_t pin) {
 }
 
 int GPIO_write(int8_t pin, int val) {
-    GPIO* p = findGPIO(pin);
+    GPIO_t* p = findGPIO(pin);
     assert(p!=NULL);
     assert(p->type==GPIO_OUT);
     p->value = (val!=0?1:0);
@@ -179,7 +180,7 @@ int GPIO_write(int8_t pin, int val) {
 }
 
 int GPIO_read(int8_t pin) {
-    GPIO* p = findGPIO(pin);
+    GPIO_t* p = findGPIO(pin);
     assert(p!=NULL);
     // It is allowed to read an output pin...
     if (p->lpEnabled) {
@@ -189,7 +190,7 @@ int GPIO_read(int8_t pin) {
 }
 // Note pin maps to a ADC channel which may or may not map to an external pin
 int GPIO_readADCmV(int8_t pin) {
-    GPIO* p = findGPIO(pin);
+    GPIO_t* p = findGPIO(pin);
     assert(p!=NULL);
     // It is allowed to read an output pin...
     if (p->lpEnabled) {
@@ -199,7 +200,7 @@ int GPIO_readADCmV(int8_t pin) {
     return p->value;
 }
 int GPIO_toggle(int8_t pin) {
-    GPIO* p = findGPIO(pin);
+    GPIO_t* p = findGPIO(pin);
     assert(p!=NULL);
     assert(p->type==GPIO_OUT);
     p->value = (p->value!=0)?0:1;        // Invert
@@ -212,7 +213,7 @@ int GPIO_toggle(int8_t pin) {
 }
 
 // Internals
-static GPIO* findGPIO(int8_t p) {
+static GPIO_t* findGPIO(int8_t p) {
     // take MUTEX
     os_mutex_pend(&_gpiomutex, OS_TIMEOUT_NEVER);
     for(int i=0;i<MAX_GPIOS;i++) {
@@ -224,7 +225,7 @@ static GPIO* findGPIO(int8_t p) {
     os_mutex_release(&_gpiomutex);
     return NULL;
 }
-static GPIO* allocGPIO(int8_t p) {
+static GPIO_t* allocGPIO(int8_t p) {
     // take MUTEX
     os_mutex_pend(&_gpiomutex, OS_TIMEOUT_NEVER);
     if (findGPIO(p)==NULL) {
@@ -243,7 +244,7 @@ static GPIO* allocGPIO(int8_t p) {
 }
 
 // release the slot
-static void releaseGPIO(GPIO* g) {
+static void releaseGPIO(GPIO_t* g) {
     assert(g!=NULL);
     // take MUTEX
     os_mutex_pend(&_gpiomutex, OS_TIMEOUT_NEVER);
@@ -271,7 +272,7 @@ static void checkForNoADC() {
 }
 
 // setup pin in hal (at init or when coming back from low power)
-static void init_hal(GPIO* p) {
+static void init_hal(GPIO_t* p) {
     // if not active then noop
     if (p->lpEnabled) {
         switch (p->type) {
@@ -304,7 +305,7 @@ static void init_hal(GPIO* p) {
     }
 }
 // deinit pin in hal (when no longer used or when entering low power)
-static void deinit_hal(GPIO* p) {
+static void deinit_hal(GPIO_t* p) {
     // check it is currently active, noop if not
     if (p->lpEnabled) {
         // irq or adc pins require specific release actions first
@@ -324,7 +325,7 @@ static void deinit_hal(GPIO* p) {
 }
 
 // Callback from LP manager
-static void onLPModeChange(LP_MODE current, LP_MODE next) {
+static void onLPModeChange(LP_MODE_t current, LP_MODE_t next) {
     log_debug("GM:LPM check");
     os_mutex_pend(&_gpiomutex, OS_TIMEOUT_NEVER);
     for(int i=0;i<MAX_GPIOS;i++) {

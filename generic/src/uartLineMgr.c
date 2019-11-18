@@ -51,6 +51,7 @@ static struct UARTDeviceCfg {
     uint8_t rxIdx;
     uint8_t txIdx;
     bool filterASCII;
+    bool isSuspended;       // for power management
     char eol;
     int8_t uartSelect;
 } _cfgs[MAX_NB_UARTS];          
@@ -65,7 +66,7 @@ static int uart_line_close(wskt_t* skt);
 static int uart_rx_cb(void*, uint8_t c);
 //static void uart_tx_ready(void* ctx);
 static int uart_tx_cb(void* ctx);
-static void lp_change(LP_MODE p, LP_MODE n);
+static void lp_change(LP_MODE_t p, LP_MODE_t n);
 
 static wskt_devicefns_t _myDevice = {
     .open = &uart_line_open,
@@ -77,13 +78,14 @@ static wskt_devicefns_t _myDevice = {
 static uint8_t _lineBuffer[UART_LINE_SZ];
 // mutex to protect it (only used in passing)
 static struct os_mutex _lbMutex;
+static LP_ID_t _lpUserId;
 
 // Called from sysinit via reference in pkg.yml
 void uart_line_comm_init(void) {
     // TODO should we use mempools to handle per-device structures?
     os_mutex_init(&_lbMutex);
         // listen for lowpower entry to deep sleep and vice versa - we deinit/init uarts when this happens
-    LPMgr_register(lp_change);
+    _lpUserId = LPMgr_register(lp_change);
 
 }
 
@@ -102,6 +104,7 @@ bool uart_line_comm_create(char* dname, uint32_t baud) {
     circ_bbuf_init(&myCfg->txBuff, &(myCfg->txBuff_data_space[0]), UART_LINE_SZ+1);
     myCfg->uartDev = NULL;
     myCfg->filterASCII = true;      // by default
+    myCfg->isSuspended = false;
     // LF is default end of line as this works for BLE code and GPS
     // Note that CR is used by console (it will set the config)
     myCfg->eol = LF;
@@ -362,12 +365,28 @@ static void uart_tx_ready(void* ctx) {
 }
 */
 // LOw power mode change - disable UART device(s) in deep low power
-static void lp_change(LP_MODE oldmode, LP_MODE newmode) {
+static void lp_change(LP_MODE_t oldmode, LP_MODE_t newmode) {
     if (newmode>=LP_DEEPSLEEP) {
-        log_debug("UM:sleep");
-        // TODO need to call all devices to deinit their hw
+        log_debug("UM:off");
+        // need to call all devices we know about to deinit their hw
+        for (int i=0;i<_nbUARTCfgs;i++) {
+            if (!_cfgs[i].isSuspended) {
+                _cfgs[i].isSuspended = true;
+                log_debug("UM:suspend %s", _cfgs[i].dname);
+                // we check if already de-inited as may not be robust on double suspend...
+    //            os_dev_suspend(_cfgs[i].dname, 0, 1);
+            }
+        }
     } else {
-        log_debug("UM:wake");
-        // TODO and here to reinit it...
+        // and here to reinit them...
+        for (int i=0;i<_nbUARTCfgs;i++) {
+            // check if alredy inited as may not be robust on double resume......
+            if (_cfgs[i].isSuspended) {
+                _cfgs[i].isSuspended = false;
+//              os_dev_resume(_cfgs[i].dname, 0, 1);
+                log_debug("UM:resume %s", _cfgs[i].dname);   // log after resume...
+            }
+        }
+        log_debug("UM:uart on");
     }
 }

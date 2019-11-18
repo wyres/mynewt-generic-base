@@ -100,6 +100,7 @@ typedef struct  {
 
 static struct loraapi_ctx {
     bool isJoin;
+    LP_ID_t lpUserId;
     LORAWAN_SF_t defaultSF;
     int defaultLWPower;
     bool useADR;
@@ -172,6 +173,9 @@ LORAWAN_RESULT_t lora_api_join(LORAWAN_JOIN_CB_t callback, LORAWAN_SF_t sf, void
             LWEVT_t* evt = (LWEVT_t*)e->ev_arg;
             evt->type = LWEVT_TYPE_DOJOIN;
             evt->req = NULL;        // not required
+            log_info("LW: JOINing as [%02x%02x%02x%02x%02x%02x%02x%02x]",
+                _loraCtx.deveui[0],_loraCtx.deveui[1],_loraCtx.deveui[2],_loraCtx.deveui[3],_loraCtx.deveui[4],_loraCtx.deveui[5],_loraCtx.deveui[6],_loraCtx.deveui[7]);
+
             os_eventq_put(_loraCtx.lwevt_q, e);
             return LORAWAN_RES_OK;
         } else {
@@ -651,7 +655,7 @@ static void execRxRadio(struct os_event* e) {
 }
 
 // Callback from low power manager about change of mode
-static void lp_change(LP_MODE prevmode, LP_MODE newmode) {
+static void lp_change(LP_MODE_t prevmode, LP_MODE_t newmode) {
     // Radio is ON in all modes except DEEPSLEEP
     if (prevmode>=LP_DEEPSLEEP && newmode <LP_DEEPSLEEP) {
         // wake up radio - init its periphs
@@ -713,7 +717,7 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
     }
     */
 
-    // Ok, ready to setup KLK Lorawan wrapper
+    // Ok, ready to setup KLK Lorawan wrapper. TBD, could do this in lorawan_join()? but then gotta deal with re-joins etc...
     uint8_t nb_rep = 1;
     int8_t txPower = 14;        // set on a per-tx basis
     int status = lorawan_configure_OTAA(_loraCtx.deveui, _loraCtx.appeui, _loraCtx.appkey, nb_rep, ((14-txPower)/2), getCfgdRegion());
@@ -750,7 +754,7 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
                  _loraCtx.loraapi_task_stack,
                  LORAAPI_TASK_STACK_SZ);
     // register with lowpowermgr to know when to deinit/init the radio
-    LPMgr_register(lp_change);
+    _loraCtx.lpUserId = LPMgr_register(lp_change);
 
     // ok lorawan api all init ok
     log_info("LW: cfgd [%02x%02x%02x%02x%02x%02x%02x%02x]",

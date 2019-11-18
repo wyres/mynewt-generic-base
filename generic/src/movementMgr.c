@@ -46,10 +46,11 @@ static struct {
     uint32_t lastOrientTime;
     bool movedSinceLastCheck;
     MM_ORIENT orientation;
+    LP_ID_t lpUserId;
 } _ctx;
 
 // low power state change callback
-void lp_change(LP_MODE prev, LP_MODE new) {
+void lp_change(LP_MODE_t prev, LP_MODE_t new) {
     if (new>=LP_DEEPSLEEP) {
         ACC_sleep();
         // deinit I2C in BSP?
@@ -73,7 +74,7 @@ void movement_init(void) {
     // start timer for checks? or register with a "callmeWhenAwakeANyway" service?
 
     // register with LP mgr to get called on changes, to deinit/init the I2C
-    LPMgr_register(lp_change);
+    _ctx.lpUserId = LPMgr_register(lp_change);
 }
 
 bool MMMgr_registerMovementCB(MM_CBFN_t cb) {
