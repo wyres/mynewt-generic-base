@@ -139,9 +139,15 @@ void* RMMgr_getLastAssertCallerFn() {
 void log_fn_fn() {
     void* caller = __builtin_extract_return_addr(__builtin_return_address(0));
     // add to PROM based circular list along with timestamp
-    *((uint32_t*)&_fnList[_fnList[FN_LIST_SZ]]) = TMMgr_getRelTime();
-    *((uint32_t*)&_fnList[_fnList[FN_LIST_SZ]+4]) = (uint32_t)caller;
-    _fnList[FN_LIST_SZ] = ((_fnList[FN_LIST_SZ]+8) % FN_LIST_SZ);
+    // LAST byte of block is index to next free entry in the block
+    struct re {
+        uint32_t ts;
+        void* caller;
+    }* entry = (struct re *)&_fnList[_fnList[FN_LIST_SZ]];
+    entry->ts = TMMgr_getRelTime();
+    entry->caller = caller;
+    // update next free index
+    _fnList[FN_LIST_SZ] = ((_fnList[FN_LIST_SZ]+sizeof(struct re)) % FN_LIST_SZ);
 }
 
 static void watchdog_task(void* arg) {
