@@ -463,7 +463,7 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
             return MS_BLE_ON;
         }
         default: {
-            log_debug("BLE:?evt %d in StoppingComm", e);
+            log_debug("BLE:? %d in StoppingComm", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -488,10 +488,10 @@ void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t 
     if (_ctx.uartDevice!=NULL) {
         if (strcmp(_ctx.uartDevice, dname)==0) {
             // already inited on same device... not an issue
-            log_debug("wble: ignore init for device %s as already inited", dname);
+            log_debug("wble: device %s already inited", dname);
             return &_ctx;
         } else {
-            log_debug("wble: FAIL init for device %s but already inited on %s", dname, _ctx.uartDevice);
+            log_debug("wble: FAIL init %s but already on %s", dname, _ctx.uartDevice);
             assert(0);
         }
     }
@@ -728,7 +728,7 @@ static void wble_mgr_rxcb(struct os_event* ev) {
                     // Tell SM
                     sm_sendEvent(_ctx.mySMId, ME_BLE_UPDATE, (void*)idx);
                 } else {
-                    log_debug("BLE:saw ib %4x,%4x but list full",ib.major, ib.minor);
+                    log_debug("BLE:saw %4x,%4x list full",ib.major, ib.minor);
                 }
             } else {
                 _ctx.nbRxBadMajor++;

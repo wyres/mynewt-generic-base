@@ -23,6 +23,10 @@
 #include "wyres-generic/minmea.h"
 #include "wyres-generic/sm_exec.h"
 
+// When debugging gps issues enable the define below
+//#define DEBUG_GPS 1
+
+
 //#define GPS_UART    MYNEWT_VAL(GPS_UART)
 //#define GPS_TASK_PRIO       MYNEWT_VAL(GPS_TASK_PRIO)
 //#define GPS_TASK_STACK_SZ   OS_STACK_ALIGN(256)
@@ -108,7 +112,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             return MS_STARTING_COMM;
         }
         default: {
-            log_debug("GPS:unknown %d in Idle", e);
+            log_debug("GPS:? %d in Idle", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -128,13 +132,13 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
                 // TODO add a battery check before and after power on as this could be nice to detect battery end of life
                 GPIO_write(ctx->pwrPin, 0);     // yup pull down for ON
             } else {
-                log_debug("GPS: no gps power control");
+//                log_debug("GPS: no gps power control");
             }
             // initialise comms to the gps via the uart like comms device defined in syscfg
             ctx->cnx = wskt_open(ctx->uartDevice, &ctx->myGPSEvent, os_eventq_dflt_get()); //&ctx->gpsMgrEQ);
 //            assert(ctx->cnx!=NULL);
             if (ctx->cnx==NULL) {
-                log_debug("GPS: Failed to get uart cnx!");
+                log_warn("GPS: Failed to get uart cnx!");
                 sm_sendEvent(ctx->mySMId, ME_GPS_UART_NOK, NULL);
                 return SM_STATE_CURRENT;
             }
@@ -160,13 +164,13 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
         }
         case SM_TIMEOUT: {
             // done GPS checking
-            log_debug("GPS: timed out : no valid data");
+            log_debug("GPS: timed out");
             // Tell cb
             callCB(GPS_COMM_FAIL);
             return MS_STOPPING_COMM;
         }
         case ME_GPS_UART_NOK: {
-            log_debug("GPS: no uart flush");
+            log_debug("GPS: no uart");
             // Tell cb
             callCB(GPS_COMM_FAIL);
             return MS_STOPPING_COMM;
@@ -180,7 +184,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
             // just check if anybody's data waiting
             if (wskt_ioctl(ctx->cnx, &cmd)!=0) {
                 // todo if required we could send the event to ourselves again and busywait on the tx being done...
-                log_debug("GPS: flushing old tx");
+                log_debug("GPS: flush old tx");
                 cmd.cmd = IOCTL_FLUSHTXRX;
                 cmd.param = 0;
                 wskt_ioctl(ctx->cnx, &cmd);
@@ -212,7 +216,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
 
         case ME_GPS_FIX: {
             // gps got a valid fix. go direct to running with it
-            log_debug("GPS: comm ok got fix direct");
+            log_debug("GPS: comm ok fix");
             callCB(GPS_NEWFIX);
             return MS_GETTING_FIX;
         }
@@ -221,7 +225,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
         }
 
         default: {
-            log_debug("GPS:unknown %d in StartingComm", e);
+            log_debug("GPS:? %d in StartingComm", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -243,7 +247,7 @@ static SM_STATE_ID_t State_GettingFix(void* arg, int e, void* data) {
         }
         case SM_TIMEOUT: {
             // done GPS checking
-            log_debug("GPS:timed out waiting for fix (%d s)",ctx->fixTimeoutSecs);
+            log_debug("GPS:timed out (%d s)",ctx->fixTimeoutSecs);
             callCB(GPS_SATLOSS);
             return MS_STOPPING_COMM;
         }
@@ -263,7 +267,7 @@ static SM_STATE_ID_t State_GettingFix(void* arg, int e, void* data) {
         }
 
         default: {
-            log_debug("GPS:unknown %d in GettingFix", e);
+            log_debug("GPS:? %d in GettingFix", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -313,7 +317,7 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
             // ignore we're already stopping
         }
         default: {
-            log_debug("GPS:unknown %d in StoppingComm", e);
+            log_debug("GPS:? %d in StoppingComm", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -440,7 +444,7 @@ static void gps_mgr_rxcb(struct os_event* ev) {
 
     // update current position if got one
     if (newdata.prec>0) {
-        log_debug("GPS:new fix (%d, %d, %d) (%d) (%d)", newdata.lat, newdata.lon, newdata.alt, newdata.prec, newdata.nSats);
+        log_debug("GPS: fix (%d, %d, %d) (%d) (%d)", newdata.lat, newdata.lon, newdata.alt, newdata.prec, newdata.nSats);
         // mutex lock
         os_mutex_pend(&_ctx.dataMutex, OS_TIMEOUT_NEVER);
         _ctx.gpsData.lat = newdata.lat;
@@ -460,7 +464,7 @@ static void gps_mgr_rxcb(struct os_event* ev) {
         // if returned 5 times during session with no 'normal' messages, the GPS is in brownout -> fail it
         if (strncmp(line, STARTUP_RESP, 5)==0) {
             if (_ctx.startupCnt++ > 5) {
-                log_warn("GPS:brownout detected");
+                log_warn("GPS:brownout");
                 sm_sendEvent(_ctx.mySMId, ME_GPS_CONN_NOK, NULL);
             }
         }
@@ -500,22 +504,31 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
             return true;
         }
         case MINMEA_INVALID: {
+#ifdef DEBUG_GPS
             log_debug("GPS:bad line [%s]", line);
+#endif /* DEBUG_GPS */
             return false;
         }
         case MINMEA_SENTENCE_GLL: {
+#ifdef DEBUG_GPS
             log_debug("GPS:GLL");
+#endif /* DEBUG_GPS */
             return true;
         }
         case MINMEA_SENTENCE_GSA: {
+#ifdef DEBUG_GPS
             log_debug("GPS:GSA");
+#endif /* DEBUG_GPS */
             return true;
         }
         case MINMEA_SENTENCE_GST: {
+#ifdef DEBUG_GPS
             log_debug("GPS:GST");
+#endif /* DEBUG_GPS */
             return true;
         }
         case MINMEA_SENTENCE_GSV: {
+#ifdef DEBUG_GPS
             struct minmea_sentence_gsv gsv;
             if (minmea_parse_gsv(&gsv, line)) {
                 int goodsats=0;
@@ -528,6 +541,7 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
             } else {
                 log_debug("GPS:GSV bad");
             }
+#endif /* DEBUG_GPS */
             return true;
         }
         case MINMEA_SENTENCE_VTG: {
@@ -535,10 +549,13 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
             return true;
         }
         case MINMEA_SENTENCE_ZDA: {
+#ifdef DEBUG_GPS
             log_debug("GPS:ZDA");
+#endif /* DEBUG_GPS */
             return true;
         }
         case MINMEA_SENTENCE_RMC: {
+#ifdef DEBUG_GPS
             struct minmea_sentence_rmc rmcdata;
             if (minmea_parse_rmc(&rmcdata, line)) {
                 if (rmcdata.valid) {
@@ -549,14 +566,17 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
             } else {
                 log_debug("GPS:rmc nok");
             }
+#endif /* DEBUG_GPS */
             // could be useful but GGA has more data - ignore
             return true;
         }
         default: {
+#ifdef DEBUG_GPS
             // unknown, ignore, but not an error
             log_debug("GPS:[%d][%s]", si,  line);
 //            log_debug("gps[%d][%c%c%c%c%c%c%c%c]", si, 
 //                line[0],line[1],line[2],line[3],line[4],line[5],line[6],line[7]);
+#endif /* DEBUG_GPS */
             return true;
         }
     }
