@@ -24,7 +24,7 @@
 #include "wyres-generic/sm_exec.h"
 
 // When debugging gps issues enable the define below
-//#define DEBUG_GPS 1
+#define DEBUG_GPS 1
 
 
 //#define GPS_UART    MYNEWT_VAL(GPS_UART)

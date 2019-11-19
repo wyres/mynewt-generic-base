@@ -623,7 +623,7 @@ static void execReqEvent(struct os_event* e) {
             if (lora_api_isJoined()) {
                 do_lora_send(req);
             } else {
-                log_debug("LW:TXUL but not joined");
+                log_debug("LW:TXUL not joined");
                 // tell sender failed as not join
                 (*req->cbfn)(req->userctx, LORAWAN_RES_NOT_JOIN);
                 // And free his slot
@@ -638,7 +638,7 @@ static void execReqEvent(struct os_event* e) {
             break;            
         }
         default:{
-            log_debug("LW:unknown event:%d", evt->type);
+            log_debug("LW:? event:%d", evt->type);
             break;
         }
     }
@@ -647,11 +647,11 @@ static void execReqEvent(struct os_event* e) {
 
 static void execTxRadio(struct os_event* e) {
     // TODO access to stack not yet possible
-    log_warn("LW:direct radio requested but not yet implemented");
+    log_warn("LW:DRTX TBI");
 }
 static void execRxRadio(struct os_event* e) {
     // TODO access to stack not yet possible
-    log_warn("LW:direct radio requested but not yet implemented");
+    log_warn("LW:DRRX TBI");
 }
 
 // Callback from low power manager about change of mode

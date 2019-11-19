@@ -23,10 +23,10 @@ enum LOGS_LEVEL { LOGS_DEBUG, LOGS_INFO, LOGS_RUN, LOGS_OFF };
 #ifdef NDEBUG
 // TODO check if this is ok to remove the calls completely from the binary
 //#define assert(__e) {do{}while(0);}       // assert always, gives us a good reboot log
-#define log_debug(__s) {do{}while(0);}
-#define log_info(__s) {do{}while(0);}
-#define log_noout(__s) {do{}while(0);}
-#define log_blocking(__s) {do{}while(0);}
+#define log_debug(__s, ...) {do{}while(0);}
+#define log_info(__s, ...) {do{}while(0);}
+#define log_noout(__s, ...) {do{}while(0);}
+#define log_blocking(__s, ...) {do{}while(0);}
 
 #else /* NDEBUG */
 
