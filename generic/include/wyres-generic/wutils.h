@@ -22,7 +22,7 @@ enum LOGS_LEVEL { LOGS_DEBUG, LOGS_INFO, LOGS_RUN, LOGS_OFF };
 
 #ifdef NDEBUG
 // TODO check if this is ok to remove the calls completely from the binary
-#define assert(__e) {do{}while(0);}
+//#define assert(__e) {do{}while(0);}       // assert always, gives us a good reboot log
 #define log_debug(__s) {do{}while(0);}
 #define log_info(__s) {do{}while(0);}
 #define log_noout(__s) {do{}while(0);}
@@ -30,11 +30,6 @@ enum LOGS_LEVEL { LOGS_DEBUG, LOGS_INFO, LOGS_RUN, LOGS_OFF };
 
 #else /* NDEBUG */
 
-#if MYNEWT_VAL(OS_CRASH_FILE_LINE)
-    #define assert(__e) ((__e) ? (void)0 : wassert_fn(__FILE__, __LINE__))
-#else
-    #define assert(__e) ((__e) ? (void)0 : wassert_fn(NULL, 0))
-#endif
 #define log_debug log_debug_fn
 #define log_info log_info_fn
 #define log_noout log_noout_fn
@@ -42,7 +37,12 @@ enum LOGS_LEVEL { LOGS_DEBUG, LOGS_INFO, LOGS_RUN, LOGS_OFF };
 
 #endif /* NDEBUG */
 
-// Always have 'run' level operation : warn/error and function logging
+// Always have 'run' level operation : assert, warn/error and function logging
+#if MYNEWT_VAL(OS_CRASH_FILE_LINE)
+    #define assert(__e) ((__e) ? (void)0 : wassert_fn(__FILE__, __LINE__))
+#else
+    #define assert(__e) ((__e) ? (void)0 : wassert_fn(NULL, 0))
+#endif
 #define log_warn log_warn_fn
 #define log_error log_error_fn
 #define log_fn log_fn_fn
