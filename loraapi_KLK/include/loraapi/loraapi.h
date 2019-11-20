@@ -64,6 +64,11 @@ LORAWAN_REQ_ID_t lora_api_radio_rx(uint32_t abs_time, LORAWAN_SF_t sf, uint32_t 
 // Not yet implmented.
 bool lora_api_cancel(LORAWAN_REQ_ID_t id);
 
+// Get current lora region
+int lora_api_getCurrentRegion();
+// Set a new region (before JOIN). If the region has not been compiled into this firmware, an error is returned.
+LORAWAN_RESULT_t lora_api_setCurrentRegion(int r);
+
 #ifdef __cplusplus
 }
 #endif

@@ -336,6 +336,20 @@ bool lora_api_cancel(LORAWAN_REQ_ID_t id) {
     return true;
 }
 
+// Get current lora region
+int lora_api_getCurrentRegion() {
+    return lorawan_get_current_region();
+}
+
+// Set a new region (before JOIN). If the region has not been compiled into this firmware, an error is returned.
+LORAWAN_RESULT_t lora_api_setCurrentRegion(int r) {
+    if (r==lora_api_getCurrentRegion()) {
+        return LORAWAN_RES_OK;
+    }
+    // Can't change region just now....
+    return LORAWAN_RES_BADPARAM;
+}
+
 
 // Internals
 
@@ -362,19 +376,6 @@ static void freeEvent(struct os_event* e) {
     os_mutex_release(&_loraCtx.lwevts_mutex);
 }
 
-static lorawan_region_t getCfgdRegion() {
-    if (MYNEWT_VAL(LORAWAN_REGION_EU868)) {
-        return LORAWAN_REGION_EU868;
-    }
-    if (MYNEWT_VAL(LORAWAN_REGION_IN865)) {
-        return LORAWAN_REGION_IN865;
-    }
-//    if (MYNEWT_VAL(LORAWAN_REGION_RU864)) {
-//        return LORAWAN_REGION_RU864;
-//    }
-    // By default we are EU
-    return LORAWAN_REGION_EU868;
-}
 
 /*
 static bool spi0_read_buffer(uint8_t addr, uint8_t* buffer, uint8_t sz) {
@@ -720,10 +721,10 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
     // Ok, ready to setup KLK Lorawan wrapper. TBD, could do this in lorawan_join()? but then gotta deal with re-joins etc...
     uint8_t nb_rep = 1;
     int8_t txPower = 14;        // set on a per-tx basis
-    int status = lorawan_configure_OTAA(_loraCtx.deveui, _loraCtx.appeui, _loraCtx.appkey, nb_rep, ((14-txPower)/2), getCfgdRegion());
+    int status = lorawan_configure_OTAA(_loraCtx.deveui, _loraCtx.appeui, _loraCtx.appkey, nb_rep, ((14-txPower)/2), lora_api_getCurrentRegion());
     assert(status == LORAWAN_STATUS_OK);
 //    } else {
-//        int status = lorawan_configure_ABP(_loraCfg.devAddr, _loraCfg.nwkSkey, _loraCfg.appSkey, nb_rep, ((14-_loraCfg.txPower)/2), getCfgdRegion());
+//        int status = lorawan_configure_ABP(_loraCfg.devAddr, _loraCfg.nwkSkey, _loraCfg.appSkey, nb_rep, ((14-_loraCfg.txPower)/2), lora_api_getCurrentRegion());
 //        assert(status == LORAWAN_STATUS_OK);
 //        log_debug("Started LoRaWAN OK in ABP mode [with devAddr:%08lx]", _loraCfg.devAddr);
 //    }
