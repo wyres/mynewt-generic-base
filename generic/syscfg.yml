@@ -1,5 +1,9 @@
 syscfg.defs:
-    # task priorities : lower is higher priority : NOTE : MUST NOT HAVE 2 TASKS WITH SAME PRIO OR SYSTEM FAULT
+    BUILD_RELEASE:
+        description: "is this build for a production release - by default NO"
+        value: 0
+
+        # task priorities : lower is higher priority : NOTE : MUST NOT HAVE 2 TASKS WITH SAME PRIO OR SYSTEM FAULT
     # redefine in target sys.yml to ensure uniqueness with rest of your app
     SM_TASK_PRIO:
         description: "state machine execution task priority"

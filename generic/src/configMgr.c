@@ -53,9 +53,9 @@ static uint16_t getIdxKey(int idx);
 static uint8_t getIdxLen(int idx);
 static uint16_t getIdxOff(int idx);
 static void informListeners(uint16_t key);
-#ifndef NDEBUG
+#ifndef RELEASE_BUILD
 void dumpCfg();
-#endif /* NDEBUG */
+#endif /* RELEASE_BUILD */
 // See eeprom_board.c in src/board/iM880C for basic access methods eg EEPROM_SaveConfiguration() (but do it much better)
 
 // Register a callback fn for whenever the cfg changes
@@ -381,7 +381,7 @@ static uint16_t getIdxOff(int idx) {
     return hal_bsp_nvmRead16(_cfg.indexStart+(idx*INDEX_SIZE)+3);    
 }
 
-#ifndef NDEBUG
+#ifndef RELEASE_BUILD
 // DUMP PROM to blocking UART
 void dumpCfg() {
     hal_bsp_nvmUnlock();
@@ -406,7 +406,7 @@ void dumpCfg() {
     hal_bsp_nvmLock();
 
 }
-#endif /* NDEBUG */ 
+#endif /* RELEASE_BUILD */ 
 #ifdef UNITTEST
 bool unittest_cfg() {
     bool ret = true;        // assume all will go ok

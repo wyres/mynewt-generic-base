@@ -20,29 +20,49 @@ extern "C" {
 
 enum LOGS_LEVEL { LOGS_DEBUG, LOGS_INFO, LOGS_RUN, LOGS_OFF };
 
-#ifdef NDEBUG
-// TODO check if this is ok to remove the calls completely from the binary
-//#define assert(__e) {do{}while(0);}       // assert always, gives us a good reboot log
+// We signal production code with explicit define, not NDEBUG. This is coz NDEBUG
+// removes asserts everywhere (including mynewt etc), and these asserts are generally
+// not just 'test/debug' cases, but also 'badness reboot recovery' cases... 
+// Release code therefore just removes logs and other debug/test code surrounded by #ifndef RELEASE_BUILD/#endif
+#if MYNEWT_VAL(BUILD_RELEASE)
+#ifndef RELEASE_BUILD 
+#define RELEASE_BUILD (1)
+#endif
+
 #define log_debug(__s, ...) {do{}while(0);}
 #define log_info(__s, ...) {do{}while(0);}
 #define log_noout(__s, ...) {do{}while(0);}
 #define log_blocking(__s, ...) {do{}while(0);}
 
-#else /* NDEBUG */
+#else /* BUILD_RELEASE */
+// Ensure define is not defined when not in release
+#ifdef RELEASE_BUILD 
+#undef RELEASE_BUILD
+#endif
 
 #define log_debug log_debug_fn
 #define log_info log_info_fn
 #define log_noout log_noout_fn
 #define log_blocking log_blocking_fn
 
-#endif /* NDEBUG */
+#endif /* BUILD_RELEASE */
 
 // Always have 'run' level operation : assert, warn/error and function logging
+// NOTE : global assert defined in libc/assert.h, defined to call OS_CRASH() defined in os/os_fault.h which is the __assert_func()
+// defined in the MCU specific os_fault.c (os/src/arch/src/cortex_m3/os_fault.c for example)
+// This can be set to call the os_assert_cb() function by defined OS_ASSERT_CB: 1, which is defined in wutils.c to call the same wassert_fn() as here...
+// fun times... 
+#ifdef NDEBUG
+// When removing assert, beware of 'unused variable' warnings. This 'void' of assert avoids that but at the cost of requiring the vars
+// in the test to exist... which isn't quite C standard... note lack of ; at end...
+#define assert(__e) {do{ (void)sizeof((__e)); }while(0);}
+#else /* NDEBUG */ 
 #if MYNEWT_VAL(OS_CRASH_FILE_LINE)
     #define assert(__e) ((__e) ? (void)0 : wassert_fn(__FILE__, __LINE__))
 #else
     #define assert(__e) ((__e) ? (void)0 : wassert_fn(NULL, 0))
 #endif
+#endif /* NDEBUG */
 #define log_warn log_warn_fn
 #define log_error log_error_fn
 #define log_fn log_fn_fn
