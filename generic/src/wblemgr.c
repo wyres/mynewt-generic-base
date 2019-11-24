@@ -567,6 +567,8 @@ int wble_getNbIB(void* c) {
 // get the list of IBs (best to do this once stopped)
 ibeacon_data_t* wble_getIBList(void* c, int* sz) {
     assert(c!=NULL);
+    // If error during scan/ble comm etc, then return NULL to indicate this
+    // TODO
     struct blectx* ctx = (struct blectx*)c;
     *sz = ctx->ibListSz;
     return &ctx->ibList[0];
