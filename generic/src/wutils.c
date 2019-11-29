@@ -41,7 +41,7 @@ void wassert_fn(const char* file, int lnum) {
     // see https://gcc.gnu.org/onlinedocs/gcc/Return-Address.html
     void* assert_caller = 0;
     assert_caller = __builtin_extract_return_addr(__builtin_return_address(0));
-    log_debug("assert from [%8x] see APP.elf.lst", assert_caller);
+    log_blocking_fn(1,"assert from [%8x] see APP.elf.lst", assert_caller);
     RMMgr_saveAssertCaller(assert_caller);
     // flash led
     hal_gpio_init_out(LED_1, 1);
@@ -87,11 +87,11 @@ void wreboot_cb(void) {
 
 #define MAX_LOGSZ 256
     // Default log level depending on build (can be changed by app)
-#ifdef NDEBUG
+#ifdef RELEASE_BUILD
 static uint8_t _logLevel = LOGS_RUN;
-#else /* NDEBUG */
+#else /* RELEASE_BUILD */
 static uint8_t _logLevel = LOGS_DEBUG;
-#endif /* NDEBUG */
+#endif /* RELEASE_BUILD */
 
 // Must be static buffer NOT ON STACK
 static char _buf[MAX_LOGSZ];
@@ -143,8 +143,26 @@ static void do_log(char lev, const char* ls, va_list vl) {
        }
    }
 }
-
-void log_level(uint8_t l) {
+uint8_t get_log_level() {
+    return _logLevel;
+}
+const char* get_log_level_str() {
+    switch(get_log_level()) {
+        case LOGS_RUN: {
+            return "RUN";
+        }
+        case LOGS_INFO: {
+            return "INFO";
+        }
+        case LOGS_DEBUG: {
+            return "DEBUG";
+        }
+        default:{
+            return "OFF";
+        }
+    }
+}
+void set_log_level(uint8_t l) {
     _logLevel = l;
 }
 

@@ -380,7 +380,7 @@ static void processATCmd(char* line) {
             // call the specific command processor function as registered
             if ((*_ctx.cmds[i].fn)(elsi, els)!=ATCMD_OK) {
                 // error message : should be determined by return
-                wconsole_println("Error : bad arguments to %s : %s", _ctx.cmds[i].cmd, _ctx.cmds[i].desc);
+                wconsole_println("Error : bad args for %s : %s", _ctx.cmds[i].cmd, _ctx.cmds[i].desc);
             }
             return;
         }

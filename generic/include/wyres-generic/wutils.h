@@ -80,7 +80,9 @@ void log_error_fn(const char* sl, ...);
 void log_noout_fn(const char* sl, ...);
 void log_blocking_fn(int u, const char* sl, ...);
 void log_fn_fn();
-void log_level(uint8_t lev);
+uint8_t get_log_level();
+const char* get_log_level_str();
+void set_log_level(uint8_t lev);
 
 
 // Unittest support

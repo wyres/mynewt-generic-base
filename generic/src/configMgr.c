@@ -166,13 +166,20 @@ bool CFMgr_setElement(uint16_t key, void* data, uint8_t len) {
             log_noout("CFGSE:CK %4x at idx %d", key, idx);
         }
     } else {
-        assert(len==getIdxLen(idx));
-        // Write data
-        ret = hal_bsp_nvmWrite(getIdxOff(idx), getIdxLen(idx), (uint8_t*)data);
+        uint8_t klen = getIdxLen(idx);
+        if (len==klen) {
+            // Write data
+            ret = hal_bsp_nvmWrite(getIdxOff(idx), getIdxLen(idx), (uint8_t*)data);
+        } else {
+            log_noout("CFGSE:FAIL SK %4x at idx %d bad len %d should be %d", key, idx, len, klen);
+            ret = false;
+        }
     }
     hal_bsp_nvmLock();
-    // Tell cfg listeners
-    informListeners(key);
+    // Tell cfg listeners if ok
+    if (ret) {
+        informListeners(key);
+    }
     return ret;
 }
 
