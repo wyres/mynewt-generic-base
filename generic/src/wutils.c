@@ -28,9 +28,6 @@
 #include "wyres-generic/rebootmgr.h"
 #include "wyres-generic/timemgr.h"
 
-// TODO handle versioning
-uint8_t _fver = 0;
-
 // assert gets stack to determine address of line that called it to dump in log
 // also write stack into prom for reboot analysis
 /**
@@ -41,8 +38,8 @@ void wassert_fn(const char* file, int lnum) {
     // see https://gcc.gnu.org/onlinedocs/gcc/Return-Address.html
     void* assert_caller = 0;
     assert_caller = __builtin_extract_return_addr(__builtin_return_address(0));
-    log_blocking_fn(1,"assert from [%8x] see APP.elf.lst", assert_caller);
     RMMgr_saveAssertCaller(assert_caller);
+    log_blocking_fn(1,"assert from [%8x] see APP.elf.lst", assert_caller);
     // flash led
     hal_gpio_init_out(LED_1, 1);
     hal_gpio_init_out(LED_2, 0);
@@ -220,6 +217,9 @@ void log_info_fn(const char* ls, ...) {
     }
 }
 void log_warn_fn(const char* ls, ...) {
+    // Log the caller of this log, in case no output device
+    void* caller = __builtin_extract_return_addr(__builtin_return_address(0));
+    RMMgr_addLogFn(caller);
     if (_logLevel<=LOGS_RUN) {
         va_list vl;
         va_start(vl, ls);
@@ -228,6 +228,10 @@ void log_warn_fn(const char* ls, ...) {
     }
 }
 void log_error_fn(const char* ls, ...) {
+    // Log the caller of this log, in case no output device
+    void* caller = __builtin_extract_return_addr(__builtin_return_address(0));
+    RMMgr_addLogFn(caller);
+
     if (_logLevel<=LOGS_RUN) {
         va_list vl;
         va_start(vl, ls);
@@ -258,6 +262,11 @@ void log_blocking_fn(int u, const char* ls, ...) {
     hal_uart_blocking_tx(u, '\n');
     hal_uart_blocking_tx(u, '\r');
     va_end(vl);
+}
+// Log caller of this method
+void log_fn_fn() {
+    void* caller = __builtin_extract_return_addr(__builtin_return_address(0));
+    RMMgr_addLogFn(caller);
 }
 
 bool unittest(const char* tn, bool res) {

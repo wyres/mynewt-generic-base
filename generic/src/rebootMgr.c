@@ -66,7 +66,9 @@ void reboot_init(void) {
 
     // Get last assert caller
     CFMgr_getOrAddElement(CFG_UTIL_KEY_ASSERTCALLERFN, &_assertCallerFn, 4);
-    // and reset so we know if reboot due to reset?
+
+    // fn logging list (should have been stored at reboot...)
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_FN_LIST, &_fnList, FN_LIST_SZ+1);
 
     // fixup reason string
     _resetReason[0] = '0'+((_appReasonCode / 10)%10);
@@ -134,20 +136,46 @@ void RMMgr_saveAssertCaller(void* fnaddr) {
 void* RMMgr_getLastAssertCallerFn() {
     return _assertCallerFn;
 }
-
-// Log passage in a fn by recording its address for later analysis
-void log_fn_fn() {
-    void* caller = __builtin_extract_return_addr(__builtin_return_address(0));
-    // add to PROM based circular list along with timestamp
-    // LAST byte of block is index to next free entry in the block
-    struct re {
+typedef struct {
         uint32_t ts;
         void* caller;
-    }* entry = (struct re *)&_fnList[_fnList[FN_LIST_SZ]];
+} FNP_LOG_t;
+
+// Log passage in a fn by recording its address for later analysis
+void RMMgr_addLogFn(void* caller) {
+    // add to circular list along with timestamp
+    // LAST byte of block is index to next free entry in the block
+        // Calculate current (empty) slot offset
+    uint8_t index = _fnList[FN_LIST_SZ];
+    if (index>=FN_LIST_SZ) {
+        index = 0;      // reset if we find it to be bad
+        _fnList[FN_LIST_SZ] = 0;
+    }
+
+    FNP_LOG_t* entry = (FNP_LOG_t *)&_fnList[index];
     entry->ts = TMMgr_getRelTime();
     entry->caller = caller;
     // update next free index
-    _fnList[FN_LIST_SZ] = ((_fnList[FN_LIST_SZ]+sizeof(struct re)) % FN_LIST_SZ);
+    _fnList[FN_LIST_SZ] = ((index+sizeof(FNP_LOG_t)) % FN_LIST_SZ);
+    // This is written to PROM if reboot called
+}
+
+// Get specific log fn entry from the log list of fns 
+void* RMMgr_getLogFn(uint8_t offset) {
+    if (offset>FN_LIST_SZ/sizeof(FNP_LOG_t)) {
+        return NULL;
+    }
+    // Calculate current (empty) slot offset
+    uint8_t index = _fnList[FN_LIST_SZ];
+    if (index>=FN_LIST_SZ) {
+        index = 0;      // reset if we find it to be bad
+        _fnList[FN_LIST_SZ] = 0;
+    }
+    // GO back by 'offset+1' items (looping round if required)
+    index = (index-((offset+1)*sizeof(FNP_LOG_t)))%(FN_LIST_SZ);
+
+    FNP_LOG_t* entry = (FNP_LOG_t *)&_fnList[index];
+    return entry->caller;
 }
 
 static void watchdog_task(void* arg) {

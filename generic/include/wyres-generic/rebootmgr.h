@@ -29,6 +29,9 @@ void RMMgr_saveAssertCaller(void* fnaddr);
 uint32_t RMMgr_getLastAssertCallerLoc();
 void* RMMgr_getLastAssertCallerFn();
 bool RMMgr_wasHardReset();
+void RMMgr_addLogFn(void* caller);
+// Get a logged fn pointer (offset is the 'last but N' value)
+void* RMMgr_getLogFn(uint8_t offset);
 
 enum RM_reason { RM_HARD_RESET = 0, RM_ASSERT, RM_WATCHDOG, RM_RADIO_ERR, RM_HW_ERR, RM_DM_ACTION, RM_AT_ACTION };
 
