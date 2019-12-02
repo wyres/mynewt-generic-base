@@ -30,6 +30,7 @@
 #define MAX_MMCBFNS MYNEWT_VAL(MAX_MMCBFNS)
 
 static void callMovedCBs();
+static void checkMoved();
 static void checkOrientationChange();
 
 static struct {
@@ -67,8 +68,8 @@ void movement_init(void) {
     _ctx.orientation = UNKNOWN;
     // check accelero sensor exists and configure it
     if (!ACC_init()) {
-        log_debug("accelero hw init fails");
-        assert(0);
+        log_error("accelero hw init fails");
+//        assert(0);
     }
 
     // start timer for checks? or register with a "callmeWhenAwakeANyway" service?
@@ -97,17 +98,24 @@ bool MMMgr_registerOrientationCB(MM_CBFN_t cb) {
 }
 // poll accelero for x,y,z,moved,fall,shock
 void MMMgr_check() {
-    ACC_activate();
-    ACC_readXYZ(&_ctx.x, &_ctx.y, &_ctx.z);
-    if (ACC_HasDetectedMoved()) {
-        _ctx.movedSinceLastCheck = true;
-        _ctx.lastMoveTime = TMMgr_getRelTime();
-        callMovedCBs();
+    if (ACC_activate()) {
+        log_debug("mm:check");
+        if (ACC_HasDetectedMoved()) {
+            _ctx.movedSinceLastCheck = true;
+            _ctx.lastMoveTime = TMMgr_getRelTime();
+            log_debug("mm:MOVED");
+        }
+        if (ACC_HasDetectedFalling()) {
+            _ctx.lastFallTime = TMMgr_getRelTime();
+            log_debug("mm:FALLEN");
+        }
+        ACC_readXYZ(&_ctx.x, &_ctx.y, &_ctx.z);
+        log_debug("x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
+        ACC_sleep();
+    } else {
+        log_warn("mm:accelero failed to activate");
     }
-    if (ACC_HasDetectedFalling()) {
-        _ctx.lastFallTime = TMMgr_getRelTime();
-    }
-    ACC_sleep();
+    checkMoved();
     checkOrientationChange();
 }
 
@@ -166,6 +174,12 @@ static void callMovedCBs() {
         if (_ctx.movecbs[i]!=NULL) {
             (*_ctx.movecbs[i])();
         }
+    }
+}
+static void checkMoved() {
+    if (_ctx.movedSinceLastCheck) {
+        callMovedCBs();
+        _ctx.movedSinceLastCheck = false;
     }
 }
 static void checkOrientationChange() {

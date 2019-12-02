@@ -40,8 +40,8 @@ pkg.init:
     uart_selector_init : 104
     uart_line_comm_init : 105
     wlog_init : 106      # must be after uart line init
-#    movement_init : 106
-    SRMgr_init: 107
+    movement_init : 107
+    SRMgr_init: 108
     init_sm_exec : 110
     LPMgr_init: 111     # hook WFI sleeping
     

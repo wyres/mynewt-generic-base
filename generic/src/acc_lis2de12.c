@@ -27,7 +27,7 @@
 // I2C address
 #define LIS2DE_I2C_ADDRESS      0x4C
 // LID2DE12 Registers
-#define LIS2DE_ID             	0x0D
+#define LIS2DE_ID             	0x33            //0x0D
 //#define LIS2DE_SLAVE_ADDRESS	0x32
 // Registers
 #define LIS2DE_STATUS_REG_AUX 	0x07
@@ -74,6 +74,7 @@
 // TEMP_CFG_REG masks
 #define LIS2DE_TEMP_EN_MASK 	0xC0
 // CTRL_REG1 masks
+#define LIS2DE_LPEN_MASK            0x80
 #define LIS2DE_ODR_MASK 			0xF0
 #define LIS2DE_Z_EN_MASK 			0x04
 #define LIS2DE_Y_EN_MASK 			0x02
@@ -191,12 +192,14 @@
  */
 static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data )
 {
+    // For write, first the register address and then the actual value
+    uint8_t i2c_data[2] = { addr, data};
     struct hal_i2c_master_data mdata = {
         .address = ACCELERO_I2C_ADDR,
-        .buffer = &data,
-        .len = 1,
+        .buffer = i2c_data,
+        .len = 2,
     };
-    int rc = hal_i2c_master_read(ACCELERO_I2C_CHAN, &mdata, I2C_ACCESS_TIMEOUT, 1);
+    int rc = hal_i2c_master_write(ACCELERO_I2C_CHAN, &mdata, I2C_ACCESS_TIMEOUT, 1);
     if (rc==0) {
         return true;
     } else {
@@ -213,12 +216,18 @@ static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data )
  */
 static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data )
 {
+    // For read, first write the register address, then read the data
     struct hal_i2c_master_data mdata = {
         .address = ACCELERO_I2C_ADDR,
-        .buffer = data,
+        .buffer = &addr,
         .len = 1,
     };
-    int rc = hal_i2c_master_read(ACCELERO_I2C_CHAN, &mdata, I2C_ACCESS_TIMEOUT, 1);
+    // Write reg address
+    int rc = hal_i2c_master_write(ACCELERO_I2C_CHAN, &mdata, I2C_ACCESS_TIMEOUT, 1);
+    if (rc==0) {
+        mdata.buffer = data;    // read the data now
+        rc = hal_i2c_master_read(ACCELERO_I2C_CHAN, &mdata, I2C_ACCESS_TIMEOUT, 1);
+    }
     if (rc==0) {
         return true;
     } else {
@@ -236,25 +245,29 @@ static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data )
  * @param value
  * @return true if ok
  */
-static bool LIS2DE12_WriteMaskedRegister(uint8_t register_addr, uint8_t mask, bool value)
+/* static bool LIS2DE12_WriteMaskedRegister(uint8_t register_addr, uint8_t mask, bool setbits)
 {
     uint8_t data = 0;
     uint8_t tmp = 0;
 
-    data = LIS2DE12_ReadReg(register_addr, &data);
+    if (!LIS2DE12_ReadReg(register_addr, &data)) {
+        return false;
+    }
 
-    if(value)
+    if(setbits)
     {
+        // Set the bits in the mask
         tmp = (mask | data);
     }
     else
     {
+        // clear the bits in the mask
         tmp = ((~mask) &data);
     }
 
     return LIS2DE12_WriteReg(register_addr, tmp);
 }
-
+*/
 // interface to accelero - rewrite to use sensor device driver?
 bool ACC_init() {
     uint8_t data = 0;
@@ -267,13 +280,13 @@ bool ACC_init() {
         return false;
     }
     if (Rx!=LIS2DE_ID) {
-        log_debug("accelero has bad id %d", Rx);
+        log_error("accelero has bad id %d", Rx);
         return false;
     }
 
     ACC_activate();
 
-    data = (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK);
+    data = (LIS2DE_XYZ_EN_MASK | LIS2DE_LPEN_MASK | LIS2DE_TEN_HZ_MASK);
     if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, data ))
     {
         return false;
@@ -353,11 +366,10 @@ bool ACC_init() {
     return true;
 }
 bool ACC_activate() {
-    return LIS2DE12_WriteMaskedRegister(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK), false);
-
+    return LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_LPEN_MASK | LIS2DE_TEN_HZ_MASK));
 }
 bool ACC_sleep() {
-    return LIS2DE12_WriteMaskedRegister( LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_POWER_DOWN_MASK), true);
+    return LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_LPEN_MASK));
 }
 bool ACC_readXYZ(int8_t* xp, int8_t* yp, int8_t* zp) {
     bool res = true;
