@@ -97,6 +97,7 @@ bool MMMgr_registerOrientationCB(MM_CBFN_t cb) {
     return false;
 }
 // poll accelero for x,y,z,moved,fall,shock
+// TODO possbily should 'start'/'stop' to let accelero have time to decide which way is up before reading values?
 void MMMgr_check() {
     if (ACC_activate()) {
         log_debug("mm:check");
