@@ -28,7 +28,6 @@
 #define LIS2DE_I2C_ADDRESS      0x4C
 // LID2DE12 Registers
 #define LIS2DE_ID             	0x33            //0x0D
-//#define LIS2DE_SLAVE_ADDRESS	0x32
 // Registers
 #define LIS2DE_STATUS_REG_AUX 	0x07
 #define LIS2DE_OUT_TEMP_L 		0x0C
@@ -74,7 +73,7 @@
 // TEMP_CFG_REG masks
 #define LIS2DE_TEMP_EN_MASK 	0xC0
 // CTRL_REG1 masks
-#define LIS2DE_LPEN_MASK            0x80
+#define LIS2DE_LPEN_MASK            0x08
 #define LIS2DE_ODR_MASK 			0xF0
 #define LIS2DE_Z_EN_MASK 			0x04
 #define LIS2DE_Y_EN_MASK 			0x02
@@ -190,7 +189,7 @@
  * @param buffer data
  * @return true if ok
  */
-static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data )
+static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data, uint16_t size )
 {
     // For write, first the register address and then the actual value
     uint8_t i2c_data[2] = { addr, data};
@@ -206,7 +205,6 @@ static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data )
         log_warn("i2c write to accelero fails:%d", rc);
         return false;
     }
-//    return (I2cWriteBuffer( &I2c, (LIS2DE_SLAVE_ADDRESS << 1), addr, &data, 1 )!=0);
 }
 /*!
  * Accelerometer read register
@@ -214,7 +212,7 @@ static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data )
  * @param buffer data
  * @return true if ok
  */
-static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data )
+static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data, uint16_t size )
 {
     // For read, first write the register address, then read the data
     struct hal_i2c_master_data mdata = {
@@ -235,48 +233,16 @@ static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data )
         return false;
     }
 
-//    return (I2cReadBuffer( &I2c, (LIS2DE_SLAVE_ADDRESS << 1), addr, &data, 1 )!=0);
 }
 
-/*!
- * Write masked register
- * @param register addr
- * @param mask
- * @param value
- * @return true if ok
- */
-/* static bool LIS2DE12_WriteMaskedRegister(uint8_t register_addr, uint8_t mask, bool setbits)
-{
-    uint8_t data = 0;
-    uint8_t tmp = 0;
-
-    if (!LIS2DE12_ReadReg(register_addr, &data)) {
-        return false;
-    }
-
-    if(setbits)
-    {
-        // Set the bits in the mask
-        tmp = (mask | data);
-    }
-    else
-    {
-        // clear the bits in the mask
-        tmp = ((~mask) &data);
-    }
-
-    return LIS2DE12_WriteReg(register_addr, tmp);
-}
-*/
 // interface to accelero - rewrite to use sensor device driver?
 bool ACC_init() {
     uint8_t data = 0;
     uint8_t Rx = 0;
-    if (hal_i2c_master_probe(ACCELERO_I2C_CHAN, ACCELERO_I2C_ADDR, I2C_ACCESS_TIMEOUT)<0) {
-        return false;
-    }
+
     // Read its id to check its the right device
-    if (!LIS2DE12_ReadReg(LIS2DE_WHO_AM_I, &Rx)) {
+    if (!LIS2DE12_ReadReg(LIS2DE_WHO_AM_I, &Rx, 1)) {
+        log_debug("Fail, rx is %d", Rx);
         return false;
     }
     if (Rx!=LIS2DE_ID) {
@@ -284,103 +250,126 @@ bool ACC_init() {
         return false;
     }
 
-    ACC_activate();
-
     data = (LIS2DE_XYZ_EN_MASK | LIS2DE_LPEN_MASK | LIS2DE_TEN_HZ_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, data ))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, data, 1))
     {
         return false;
     }
 
     data = (LIS2DE_HPIS1_MASK | LIS2DE_HPIS2_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG2, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG2, data, 1))
     {
         return false;
     }
 
     data = LIS2DE_I1_AOI1;
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG3, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG3, data, 1))
     {
         return false;
     }
 
     data = 0x00;
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG4, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG4, data, 1))
     {
         return false;
     }
 
     data = (LIS2DE_LIR_INT1_MASK | LIS2DE_LIR_INT2_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG5, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG5, data, 1))
     {
         return false;
     }
 
     data = (LIS2DE_I2C_INT2_MASK | LIS2DE_P2_ACT_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG6, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG6, data, 1))
     {
         return false;
     }
 
     // MOTION DETECTION SETUP
     data = 0x02; // 0x02
-    if(!LIS2DE12_WriteReg(LIS2DE_INT1_THS, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_INT1_THS, data, 1))
     {
         return false;
     }
 
     data = 0x02; // 0x03
-    if(!LIS2DE12_WriteReg(LIS2DE_INT1_DURATION, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_INT1_DURATION, data, 1))
     {
         return false;
     }
 
     data = (LIS2DE_ZHIE_MASK | LIS2DE_YHIE_MASK | LIS2DE_XHIE_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_INT1_CFG, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_INT1_CFG, data, 1))
     {
         return false;
     }
 
-    // FREE FALL DETECTION SETUP
-    data = 25;
-    if(!LIS2DE12_WriteReg(LIS2DE_INT2_THS, data))
+    // SHOCK DETECTION SETUP
+    //100 x 16mg = 1.5g
+    data = 100;
+    if(!LIS2DE12_WriteReg(LIS2DE_INT2_THS, data, 1))
     {
         return false;
     }
 
     data = 0x06;
-    if(!LIS2DE12_WriteReg(LIS2DE_INT2_DURATION, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_INT2_DURATION, data, 1))
     {
         return false;
     }
 
+    //Free fall detection = X & Y & Z < threshold
     data = (LIS2DE_ZHIE_MASK | LIS2DE_YHIE_MASK | LIS2DE_XHIE_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, data))
+    if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, data, 1))
     {
         return false;
     }
+#if 0
+ // FREE FALL DETECTION SETUP
+    data = 25;
+    if(!LIS2DE12_WriteReg(LIS2DE_INT2_THS, data, 1))
+    {
+        return false;
+    }
+
+    data = 0x06;
+    if(!LIS2DE12_WriteReg(LIS2DE_INT2_DURATION, data, 1))
+    {
+        return false;
+    }
+
+    //Free fall detection = X & Y & Z < threshold
+    data = (LIS2DE_AOI_MASK | LIS2DE_ZLIE_MASK | LIS2DE_YLIE_MASK | LIS2DE_XLIE_MASK);
+    if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, data, 1))
+    {
+        return false;
+    }
+#endif
 
     // Clear IT sources by reading them
-    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx);
-    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx);
+    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx, 1);
+    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx, 1);
     return true;
 }
 bool ACC_activate() {
-    return LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_LPEN_MASK | LIS2DE_TEN_HZ_MASK));
+    //XYZ enabled, 10Hz frequency, low power mode enabled
+    return LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK), 1);
 }
 bool ACC_sleep() {
-    return LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_LPEN_MASK));
+    //Leave XYZ enabled, 10Hz frequency
+    return LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK), 1);
 }
 bool ACC_readXYZ(int8_t* xp, int8_t* yp, int8_t* zp) {
     bool res = true;
     // X axis
-    res &= LIS2DE12_ReadReg(LIS2DE_OUT_X, (uint8_t*)xp);
+    res &= LIS2DE12_ReadReg(LIS2DE_OUT_X, (uint8_t*)xp, 1);
     
     // Y axis
-    res &= LIS2DE12_ReadReg(LIS2DE_OUT_Y, (uint8_t*)yp);
+    res &= LIS2DE12_ReadReg(LIS2DE_OUT_Y, (uint8_t*)yp, 1);
     
     // Z axis
-    res &= LIS2DE12_ReadReg(LIS2DE_OUT_Z, (uint8_t*)zp);
+    res &= LIS2DE12_ReadReg(LIS2DE_OUT_Z, (uint8_t*)zp, 1);
     return res;
 }
 /*!
@@ -392,10 +381,12 @@ bool ACC_HasDetectedMoved(void)
 {
     uint8_t Rx = 0;
 
-    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx);
+    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx, 1);
     // read of reg clears it
-    if((Rx & 0x40) == 0x40)
+    //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
+    if((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
     {
+        log_debug("Has detected move, value read : %02X", Rx);
         return true;
     }
 
@@ -410,9 +401,10 @@ bool ACC_HasDetectedFalling(void)
 {
     uint8_t Rx = 0;
 
-    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx);
+    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx, 1);
     // read of reg clears it
-    if((Rx & 0x40) == 0x40)
+    //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
+    if((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
     {
         return true;
     }
