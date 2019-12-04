@@ -1,15 +1,9 @@
-# Wyres generic modules Package Definition
+# Wyres LoRa API implmentation Package Definition
 
-This is the package containing the generic firmware modules used in Wyres objects.
+This is the package containing an implementation of the loraapi API.
+This implementation uses a wrapper round the stackforce lorawan stack included in the mynewt core.
+WARNING : this implementation is not yet finished!!
 
-The source files are located in the src/ directory.
-
-Header files are located in include/ 
-
-pkg.yml contains the base definition of the package.
-
-Any questions?  Please refer to the documentation at 
-http://mynewt.apache.org/ or ask questions on dev@mynewt.apache.org
 
 /**
  * Copyright 2019 Wyres

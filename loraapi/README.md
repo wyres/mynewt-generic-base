@@ -1,7 +1,8 @@
-# Wyres LoRa API implmentation Package Definition
+# Wyres generic modules Package Definition
 
-This is the package containing an implementation of the loraapi API.
-This implementation uses the opensource Kerlink wrapper round the stackforce lorawan stack.
+This is the package containing the generic lorawan API header file.
+This defines the methods and types for the API - it has no implementation.
+To use the API, you must also reference a package that implements the API eg loraapi_KLK or loraapi_SKF
 
 /**
  * Copyright 2019 Wyres
