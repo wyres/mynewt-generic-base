@@ -18,23 +18,12 @@
 #
 
 #pkg.type: pkg
-pkg.name: "loraapi_SKF"
-pkg.description: "Lora WAN and radio access api on top of stackforce api"
+pkg.name: "loraapi"
+pkg.description: "LoRaWAN api method definitions"
 pkg.author: "support@wyres.fr"
 pkg.homepage: "http://www.wyres.fr/"
 pkg.keywords:
 
 pkg.deps:
-    - "@generic/loraapi"
-    - "@generic/generic"
-    - "@lorawan/lorawan_wrapper"
 
-pkg.cflags:
-    - -std=c99
-    - -I@lorawan/lorawan_wrapper/mynewt_board/include
-    - -I@lorawan/lorawan_wrapper/loramac_node_stackforce/src/mac
-    - -I@lorawan/lorawan_wrapper/loramac_node_stackforce/src/radio
-    - -I@lorawan/lorawan_wrapper/loramac_node_stackforce/src/boards
-    - -I@lorawan/lorawan_wrapper/loramac_node_stackforce/src/system
-
-
+pkg.init:
