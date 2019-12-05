@@ -189,7 +189,7 @@
  * @param buffer data
  * @return true if ok
  */
-static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data, uint16_t size )
+static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data )
 {
     // For write, first the register address and then the actual value
     uint8_t i2c_data[2] = { addr, data};
@@ -212,7 +212,7 @@ static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data, uint16_t size )
  * @param buffer data
  * @return true if ok
  */
-static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data, uint16_t size )
+static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data )
 {
     // For read, first write the register address, then read the data
     struct hal_i2c_master_data mdata = {
@@ -236,140 +236,116 @@ static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data, uint16_t size )
 }
 
 // interface to accelero - rewrite to use sensor device driver?
-bool ACC_init() {
+ACC_Error_t ACC_init() {
     uint8_t data = 0;
     uint8_t Rx = 0;
 
     // Read its id to check its the right device
-    if (!LIS2DE12_ReadReg(LIS2DE_WHO_AM_I, &Rx, 1)) {
+    if (!LIS2DE12_ReadReg(LIS2DE_WHO_AM_I, &Rx)) {
         log_debug("Fail, rx is %d", Rx);
-        return false;
+        return ACC_ERROR;
     }
     if (Rx!=LIS2DE_ID) {
         log_error("accelero has bad id %d", Rx);
-        return false;
+        return ACC_ERROR;
     }
 
     data = (LIS2DE_XYZ_EN_MASK | LIS2DE_LPEN_MASK | LIS2DE_TEN_HZ_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, data, 1))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, data))
     {
-        return false;
+        return ACC_ERROR;
     }
 
     data = (LIS2DE_HPIS1_MASK | LIS2DE_HPIS2_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG2, data, 1))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG2, data))
     {
-        return false;
+        return ACC_ERROR;
     }
 
     data = LIS2DE_I1_AOI1;
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG3, data, 1))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG3, data))
     {
-        return false;
+        return ACC_ERROR;
     }
 
     data = 0x00;
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG4, data, 1))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG4, data))
     {
-        return false;
+        return ACC_ERROR;
     }
 
     data = (LIS2DE_LIR_INT1_MASK | LIS2DE_LIR_INT2_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG5, data, 1))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG5, data))
     {
-        return false;
+        return ACC_ERROR;
     }
 
     data = (LIS2DE_I2C_INT2_MASK | LIS2DE_P2_ACT_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG6, data, 1))
+    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG6, data))
     {
-        return false;
+        return ACC_ERROR;
     }
 
     // MOTION DETECTION SETUP
     data = 0x02; // 0x02
-    if(!LIS2DE12_WriteReg(LIS2DE_INT1_THS, data, 1))
+    if(!LIS2DE12_WriteReg(LIS2DE_INT1_THS, data))
     {
-        return false;
+        return ACC_ERROR;
     }
 
     data = 0x02; // 0x03
-    if(!LIS2DE12_WriteReg(LIS2DE_INT1_DURATION, data, 1))
+    if(!LIS2DE12_WriteReg(LIS2DE_INT1_DURATION, data))
     {
-        return false;
+        return ACC_ERROR;
     }
 
     data = (LIS2DE_ZHIE_MASK | LIS2DE_YHIE_MASK | LIS2DE_XHIE_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_INT1_CFG, data, 1))
+    if(!LIS2DE12_WriteReg(LIS2DE_INT1_CFG, data))
     {
-        return false;
+        return ACC_ERROR;
     }
-
-    // SHOCK DETECTION SETUP
-    //100 x 16mg = 1.5g
-    data = 100;
-    if(!LIS2DE12_WriteReg(LIS2DE_INT2_THS, data, 1))
-    {
-        return false;
-    }
-
-    data = 0x06;
-    if(!LIS2DE12_WriteReg(LIS2DE_INT2_DURATION, data, 1))
-    {
-        return false;
-    }
-
-    //Free fall detection = X & Y & Z < threshold
-    data = (LIS2DE_ZHIE_MASK | LIS2DE_YHIE_MASK | LIS2DE_XHIE_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, data, 1))
-    {
-        return false;
-    }
-#if 0
- // FREE FALL DETECTION SETUP
-    data = 25;
-    if(!LIS2DE12_WriteReg(LIS2DE_INT2_THS, data, 1))
-    {
-        return false;
-    }
-
-    data = 0x06;
-    if(!LIS2DE12_WriteReg(LIS2DE_INT2_DURATION, data, 1))
-    {
-        return false;
-    }
-
-    //Free fall detection = X & Y & Z < threshold
-    data = (LIS2DE_AOI_MASK | LIS2DE_ZLIE_MASK | LIS2DE_YLIE_MASK | LIS2DE_XLIE_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, data, 1))
-    {
-        return false;
-    }
-#endif
 
     // Clear IT sources by reading them
-    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx, 1);
-    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx, 1);
-    return true;
+    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx);
+    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx);
+    return ACC_SUCCESS;
 }
-bool ACC_activate() {
+
+ACC_Error_t ACC_activate() {
     //XYZ enabled, 10Hz frequency, low power mode enabled
-    return LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK), 1);
+    if (!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK)))
+    {
+        return ACC_ERROR;
+    }
+    return ACC_SUCCESS;
 }
-bool ACC_sleep() {
+
+ACC_Error_t ACC_sleep() {
     //Leave XYZ enabled, 10Hz frequency
-    return LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK), 1);
+    if (!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK)))
+    {
+        return ACC_ERROR;
+    }
+    return ACC_SUCCESS;
 }
-bool ACC_readXYZ(int8_t* xp, int8_t* yp, int8_t* zp) {
-    bool res = true;
+ACC_Error_t ACC_readXYZ(int8_t* xp, int8_t* yp, int8_t* zp) {
+    ACC_Error_t res = ACC_SUCCESS;
     // X axis
-    res &= LIS2DE12_ReadReg(LIS2DE_OUT_X, (uint8_t*)xp, 1);
-    
+    if (!LIS2DE12_ReadReg(LIS2DE_OUT_X, (uint8_t*)xp))
+    {
+        res = ACC_ERROR;
+    }
     // Y axis
-    res &= LIS2DE12_ReadReg(LIS2DE_OUT_Y, (uint8_t*)yp, 1);
-    
+    if (!LIS2DE12_ReadReg(LIS2DE_OUT_Y, (uint8_t*)yp))
+    {
+        res = ACC_ERROR;
+    }
     // Z axis
-    res &= LIS2DE12_ReadReg(LIS2DE_OUT_Z, (uint8_t*)zp, 1);
+    if (!LIS2DE12_ReadReg(LIS2DE_OUT_Z, (uint8_t*)zp))
+    {
+        res = ACC_ERROR;
+    }
+
     return res;
 }
 /*!
@@ -381,7 +357,7 @@ bool ACC_HasDetectedMoved(void)
 {
     uint8_t Rx = 0;
 
-    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx, 1);
+    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx);
     // read of reg clears it
     //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
     if((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
@@ -397,11 +373,11 @@ bool ACC_HasDetectedMoved(void)
  * @param void
  * @return true if success and Board struct is updated
  */
-bool ACC_HasDetectedFalling(void)
+bool ACC_HasDetectedFreeFallOrShock(void)
 {
     uint8_t Rx = 0;
 
-    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx, 1);
+    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx);
     // read of reg clears it
     //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
     if((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
@@ -412,3 +388,58 @@ bool ACC_HasDetectedFalling(void)
     return false;
 }
 
+/*!
+ * @brief     Check Pin state to know if board has fall
+ * @param[IN] Threshold used to detect a shock or free fall (in terms of acceleration)
+ * @param[IN] Duration configuration of accelero detection
+ * @return    True if success
+ */
+ACC_Error_t ACC_setDetectionMode(ACC_DetectionMode_t detectionMode, uint8_t threshold, uint8_t duration)
+{
+    switch(detectionMode)
+    {
+        case ACC_ShockDetection:
+        {
+            if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, (LIS2DE_ZHIE_MASK | LIS2DE_YHIE_MASK | LIS2DE_XHIE_MASK)))
+            {
+                return ACC_ERROR;
+            }
+            break;
+        }
+        case ACC_FreeFallDetection:
+        {
+            if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, (LIS2DE_AOI_MASK | LIS2DE_ZLIE_MASK | LIS2DE_YLIE_MASK | LIS2DE_XLIE_MASK)))
+            {
+                return ACC_ERROR;
+            }
+            break;
+        }
+        case ACC_DetectionOff:
+        default:
+        {
+            if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, 0))
+            {
+                return ACC_ERROR;
+            }
+            break;
+        }
+    }
+
+    if (detectionMode != ACC_FreeFallDetection && detectionMode != ACC_ShockDetection)
+    {
+        //Basic threshold can be 100
+        //100 x 16mg = 1.5g
+        if(!LIS2DE12_WriteReg(LIS2DE_INT2_THS, threshold))
+        {
+            return ACC_ERROR;
+        }
+
+        //Duration basic value should be 6
+        if(!LIS2DE12_WriteReg(LIS2DE_INT2_DURATION, duration))
+        {
+            return ACC_ERROR;
+        }
+    }
+
+    return ACC_SUCCESS;    
+}

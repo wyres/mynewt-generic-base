@@ -25,6 +25,7 @@
 #include "wyres-generic/movementmgr.h"
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/acc_basic.h"
+#include "wyres-generic/configmgr.h"
 
 
 #define MAX_MMCBFNS MYNEWT_VAL(MAX_MMCBFNS)
@@ -63,13 +64,49 @@ void lp_change(LP_MODE_t prev, LP_MODE_t new) {
 }
 
 void movement_init(void) {
+    //Accelero config
+    ACC_DetectionMode_t detectionMode = ACC_DetectionOff;
+    uint8_t threshold = 0;
+    uint8_t duration = 0;
     // clear context
     memset(&_ctx, 0, sizeof(_ctx));
     _ctx.orientation = UNKNOWN;
+    //Retrieve config for accelero from EEPROM
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_ACCELERO_DETECTION_MODE, &detectionMode, sizeof(ACC_DetectionMode_t));
+    switch(detectionMode)
+    {
+        case ACC_FreeFallDetection:
+        {
+            threshold = 25;
+            duration  = 2;
+            CFMgr_getOrAddElement(CFG_UTIL_KEY_ACCELERO_FREEFALL_THRESHOLD, &threshold, sizeof(uint8_t));
+            CFMgr_getOrAddElement(CFG_UTIL_KEY_ACCELERO_FREEFALL_DURATION, &duration, sizeof(uint8_t));
+            break;
+        }
+        case ACC_ShockDetection:
+        {
+            threshold = 100;
+            duration  = 6;
+            CFMgr_getOrAddElement(CFG_UTIL_KEY_ACCELERO_SHOCK_THRESHOLD, &threshold, sizeof(uint8_t));
+            CFMgr_getOrAddElement(CFG_UTIL_KEY_ACCELERO_SHOCK_DURATION, &duration, sizeof(uint8_t));
+            break;
+        }
+        case ACC_DetectionOff:
+        default:
+        {
+            break;
+        }
+    }
     // check accelero sensor exists and configure it
-    if (!ACC_init()) {
+    if (ACC_init() != ACC_SUCCESS) 
+    {
         log_error("accelero hw init fails");
-//        assert(0);
+        assert(0);
+    }
+    if (ACC_setDetectionMode(detectionMode, threshold, duration) != ACC_SUCCESS)
+    {
+        log_error("accelero detection configuration fails");
+        assert(0);
     }
 
     // start timer for checks? or register with a "callmeWhenAwakeANyway" service?
@@ -99,14 +136,14 @@ bool MMMgr_registerOrientationCB(MM_CBFN_t cb) {
 // poll accelero for x,y,z,moved,fall,shock
 // TODO possbily should 'start'/'stop' to let accelero have time to decide which way is up before reading values?
 void MMMgr_check() {
-    if (ACC_activate()) {
+    if (ACC_activate() == ACC_SUCCESS) {
         log_debug("mm:check");
         if (ACC_HasDetectedMoved()) {
             _ctx.movedSinceLastCheck = true;
             _ctx.lastMoveTime = TMMgr_getRelTime();
             log_debug("mm:MOVED");
         }
-        if (ACC_HasDetectedFalling()) {
+        if (ACC_HasDetectedFreeFallOrShock()) {
             _ctx.lastFallTime = TMMgr_getRelTime();
             log_debug("mm:FALLEN");
         }

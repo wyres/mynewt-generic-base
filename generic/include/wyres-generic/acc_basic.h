@@ -19,13 +19,73 @@
 extern "C" {
 #endif
 
+// Detection modes of accelero
+typedef enum 
+{
+    ACC_DetectionOff =      0,
+    ACC_ShockDetection =    1,
+    ACC_FreeFallDetection = 2,
+} ACC_DetectionMode_t;
+
+typedef enum
+{
+    ACC_SUCCESS,
+    ACC_ERROR,
+} ACC_Error_t;
+
 // interface to accelero - rewrite to use sensor device driver?
-bool ACC_init();
-bool ACC_activate();
-bool ACC_sleep();
-bool ACC_readXYZ(int8_t* xp, int8_t* yp, int8_t* zp);
+
+/*!
+ * @brief   Initialize accelerometer (depends on implementation, typically full scale = 2g & frequency rate = 10Hz)
+ * @param   void
+ * @return  true if success
+ */
+ACC_Error_t ACC_init();
+
+/*!
+ * @brief   Activate the accelerometer
+ * @param   void
+ * @return  true if success
+ */
+ACC_Error_t ACC_activate();
+
+/*!
+ * @brief   Put accelerometer in sleep mode
+ * @param   void
+ * @return  true if success
+ */
+ACC_Error_t ACC_sleep();
+
+/*!
+ * @brief     Poll data from accelerometer
+ * @param[IN] Pointer to where data of x-axis will be written
+ * @param[IN] Pointer to where data of y-axis will be written
+ * @param[IN] Pointer to where data of z-axis will be written
+ * @return    true if success
+ */
+ACC_Error_t ACC_readXYZ(int8_t* xp, int8_t* yp, int8_t* zp);
+
+/*!
+ * @brief   Ask the accelerometer if there was a movement since last check
+ * @param   void
+ * @return  true if movement was detected
+ */
 bool ACC_HasDetectedMoved(void);
-bool ACC_HasDetectedFalling(void);
+
+/*!
+ * @brief   Ask the accelerometer if there was a shock of free fall since last check
+ * @param   void
+ * @return  true if movement was detected
+ */
+bool ACC_HasDetectedFreeFallOrShock(void);
+
+/*!
+ * @brief     Set detection mode of accelerometer
+ * @param[IN] Threshold used to detect a shock or free fall, units are 16mg (because full scale is 2g, depends on implementation)
+ * @param[IN] Duration configuration of accelero detection
+ * @return    true if success
+ */
+ACC_Error_t ACC_setDetectionMode(ACC_DetectionMode_t detectionMode, uint8_t threshold, uint8_t duration);
 
 #ifdef __cplusplus
 }
