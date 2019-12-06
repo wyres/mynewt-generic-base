@@ -182,14 +182,21 @@
 // ACT_THS masks
 #define LIS2DE_ACTH_MASK 		0x7F
 
+typedef enum
+{
+    LIS2DE12_OK,
+    LIS2DE12_ERR,
+}
+LIS2DE12_Error_t;
+
 // Private internals: should be using device driver sensor but instead directly access a lis2de12 
 /*!
- * Accelerometer rewrited register
- * @param reg addr
- * @param buffer data
- * @return true if ok
+ * @brief     Accelerometer rewrited register
+ * @param[IN] Register address
+ * @param[IN] Data to be written to internal register
+ * @return    LIS2DE12_OK, LIS2DE12_ERR
  */
-static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data )
+static LIS2DE12_Error_t LIS2DE12_WriteReg( uint8_t addr, uint8_t data )
 {
     // For write, first the register address and then the actual value
     uint8_t i2c_data[2] = { addr, data};
@@ -199,20 +206,23 @@ static bool LIS2DE12_WriteReg( uint8_t addr, uint8_t data )
         .len = 2,
     };
     int rc = hal_i2c_master_write(ACCELERO_I2C_CHAN, &mdata, I2C_ACCESS_TIMEOUT, 1);
-    if (rc==0) {
-        return true;
-    } else {
+    if (rc==0) 
+    {
+        return LIS2DE12_OK;
+    } 
+    else
+    {
         log_warn("i2c write to accelero fails:%d", rc);
-        return false;
+        return LIS2DE12_ERR;
     }
 }
 /*!
- * Accelerometer read register
- * @param reg addr
- * @param buffer data
- * @return true if ok
+ * @brief      Accelerometer read register
+ * @param[IN]  Register address
+ * @param[OUT] Data to be written
+ * @return     LIS2DE12_OK, LIS2DE12_ERR
  */
-static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data )
+static LIS2DE12_Error_t LIS2DE12_ReadReg( uint8_t addr, uint8_t *data )
 {
     // For read, first write the register address, then read the data
     struct hal_i2c_master_data mdata = {
@@ -222,15 +232,19 @@ static bool LIS2DE12_ReadReg( uint8_t addr, uint8_t *data )
     };
     // Write reg address
     int rc = hal_i2c_master_write(ACCELERO_I2C_CHAN, &mdata, I2C_ACCESS_TIMEOUT, 1);
-    if (rc==0) {
+    if (rc==0) 
+    {
         mdata.buffer = data;    // read the data now
         rc = hal_i2c_master_read(ACCELERO_I2C_CHAN, &mdata, I2C_ACCESS_TIMEOUT, 1);
     }
-    if (rc==0) {
-        return true;
-    } else {
+    if (rc==0) 
+    {
+        return LIS2DE12_OK;
+    } 
+    else 
+    {
         log_warn("i2c read to accelero fails:%d", rc);
-        return false;
+        return LIS2DE12_ERR;
     }
 
 }
@@ -241,79 +255,87 @@ ACC_Error_t ACC_init() {
     uint8_t Rx = 0;
 
     // Read its id to check its the right device
-    if (!LIS2DE12_ReadReg(LIS2DE_WHO_AM_I, &Rx)) {
+    if (LIS2DE12_ReadReg(LIS2DE_WHO_AM_I, &Rx) != LIS2DE12_OK) 
+    {
         log_debug("Fail, rx is %d", Rx);
         return ACC_ERROR;
     }
-    if (Rx!=LIS2DE_ID) {
+    if (Rx != LIS2DE_ID) 
+    {
         log_error("accelero has bad id %d", Rx);
         return ACC_ERROR;
     }
 
     data = (LIS2DE_XYZ_EN_MASK | LIS2DE_LPEN_MASK | LIS2DE_TEN_HZ_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, data))
+    if (LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
 
     data = (LIS2DE_HPIS1_MASK | LIS2DE_HPIS2_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG2, data))
+    if(LIS2DE12_WriteReg(LIS2DE_CTRL_REG2, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
 
     data = LIS2DE_I1_AOI1;
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG3, data))
+    if(LIS2DE12_WriteReg(LIS2DE_CTRL_REG3, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
 
     data = 0x00;
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG4, data))
+    if(LIS2DE12_WriteReg(LIS2DE_CTRL_REG4, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
 
     data = (LIS2DE_LIR_INT1_MASK | LIS2DE_LIR_INT2_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG5, data))
+    if(LIS2DE12_WriteReg(LIS2DE_CTRL_REG5, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
 
     data = (LIS2DE_I2C_INT2_MASK | LIS2DE_P2_ACT_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_CTRL_REG6, data))
+    if(LIS2DE12_WriteReg(LIS2DE_CTRL_REG6, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
 
     // MOTION DETECTION SETUP
     data = 0x02; // 0x02
-    if(!LIS2DE12_WriteReg(LIS2DE_INT1_THS, data))
+    if(LIS2DE12_WriteReg(LIS2DE_INT1_THS, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
 
     data = 0x02; // 0x03
-    if(!LIS2DE12_WriteReg(LIS2DE_INT1_DURATION, data))
+    if(LIS2DE12_WriteReg(LIS2DE_INT1_DURATION, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
 
     data = (LIS2DE_ZHIE_MASK | LIS2DE_YHIE_MASK | LIS2DE_XHIE_MASK);
-    if(!LIS2DE12_WriteReg(LIS2DE_INT1_CFG, data))
+    if(LIS2DE12_WriteReg(LIS2DE_INT1_CFG, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
 
     // Clear IT sources by reading them
-    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx);
-    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx);
+    if (LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx) != LIS2DE12_OK)
+    {
+        return ACC_ERROR;
+    }
+    if (LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx) != LIS2DE12_OK)
+    {
+        return ACC_ERROR;
+    }
     return ACC_SUCCESS;
 }
 
 ACC_Error_t ACC_activate() {
     //XYZ enabled, 10Hz frequency, low power mode enabled
-    if (!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK)))
+    if (LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK)) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
@@ -322,7 +344,7 @@ ACC_Error_t ACC_activate() {
 
 ACC_Error_t ACC_sleep() {
     //Leave XYZ enabled, 10Hz frequency
-    if (!LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK)))
+    if (LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK)) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
@@ -331,17 +353,17 @@ ACC_Error_t ACC_sleep() {
 ACC_Error_t ACC_readXYZ(int8_t* xp, int8_t* yp, int8_t* zp) {
     ACC_Error_t res = ACC_SUCCESS;
     // X axis
-    if (!LIS2DE12_ReadReg(LIS2DE_OUT_X, (uint8_t*)xp))
+    if (LIS2DE12_ReadReg(LIS2DE_OUT_X, (uint8_t*)xp) != LIS2DE12_OK)
     {
         res = ACC_ERROR;
     }
     // Y axis
-    if (!LIS2DE12_ReadReg(LIS2DE_OUT_Y, (uint8_t*)yp))
+    if (LIS2DE12_ReadReg(LIS2DE_OUT_Y, (uint8_t*)yp) != LIS2DE12_OK)
     {
         res = ACC_ERROR;
     }
     // Z axis
-    if (!LIS2DE12_ReadReg(LIS2DE_OUT_Z, (uint8_t*)zp))
+    if (LIS2DE12_ReadReg(LIS2DE_OUT_Z, (uint8_t*)zp) != LIS2DE12_OK)
     {
         res = ACC_ERROR;
     }
@@ -349,50 +371,55 @@ ACC_Error_t ACC_readXYZ(int8_t* xp, int8_t* yp, int8_t* zp) {
     return res;
 }
 /*!
- * Check Pin state to know if board has moved
- * @param void
- * @return true if success and Board struct is updated
+ * @brief       Check Pin state to know if board has moved
+ * @param[OUT]  Pointer to where data will be written
+ * @return      ACC_SUCCESS or ACC_ERROR
  */
-bool ACC_HasDetectedMoved(void)
+ACC_Error_t ACC_HasDetectedMoved(bool *hasDetectedMove)
 {
     uint8_t Rx = 0;
-
-    LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx);
+    *hasDetectedMove = false;
+    
+    if (LIS2DE12_ReadReg(LIS2DE_INT1_SOURCE, &Rx) != LIS2DE12_OK)
+    {
+        return ACC_ERROR;
+    }
     // read of reg clears it
     //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
-    if((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
+    if ((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
     {
-        log_debug("Has detected move, value read : %02X", Rx);
-        return true;
+        *hasDetectedMove = true;
     }
-
-    return false;
+    return ACC_SUCCESS;
 }
 /*!
- * Check Pin state to know if board has fall
- * @param void
- * @return true if success and Board struct is updated
+ * @brief       Check Pin state to know if board has fall
+ * @param[OUT]  Pointer to where data will be written
+ * @return      ACC_SUCCESS or ACC_ERROR
  */
-bool ACC_HasDetectedFreeFallOrShock(void)
+ACC_Error_t ACC_HasDetectedFreeFallOrShock(bool *hasDetectedMove)
 {
     uint8_t Rx = 0;
+    *hasDetectedMove = false;
 
-    LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx);
+    Lif (LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx) != LIS2DE12_OK)
+    {
+        return ACC_ERROR;
+    }
     // read of reg clears it
     //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
     if((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
     {
-        return true;
+        *hasDetectedMove = true;
     }
-
-    return false;
+    return ACC_SUCCESS;
 }
 
 /*!
  * @brief     Check Pin state to know if board has fall
  * @param[IN] Threshold used to detect a shock or free fall (in terms of acceleration)
  * @param[IN] Duration configuration of accelero detection
- * @return    True if success
+ * @return    ACC_SUCCESS or ACC_ERROR
  */
 ACC_Error_t ACC_setDetectionMode(ACC_DetectionMode_t detectionMode, uint8_t threshold, uint8_t duration)
 {
@@ -400,7 +427,7 @@ ACC_Error_t ACC_setDetectionMode(ACC_DetectionMode_t detectionMode, uint8_t thre
     {
         case ACC_ShockDetection:
         {
-            if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, (LIS2DE_ZHIE_MASK | LIS2DE_YHIE_MASK | LIS2DE_XHIE_MASK)))
+            if(LIS2DE12_WriteReg(LIS2DE_INT2_CFG, (LIS2DE_ZHIE_MASK | LIS2DE_YHIE_MASK | LIS2DE_XHIE_MASK)) != LIS2DE12_OK)
             {
                 return ACC_ERROR;
             }
@@ -408,7 +435,7 @@ ACC_Error_t ACC_setDetectionMode(ACC_DetectionMode_t detectionMode, uint8_t thre
         }
         case ACC_FreeFallDetection:
         {
-            if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, (LIS2DE_AOI_MASK | LIS2DE_ZLIE_MASK | LIS2DE_YLIE_MASK | LIS2DE_XLIE_MASK)))
+            if(LIS2DE12_WriteReg(LIS2DE_INT2_CFG, (LIS2DE_AOI_MASK | LIS2DE_ZLIE_MASK | LIS2DE_YLIE_MASK | LIS2DE_XLIE_MASK)) != LIS2DE12_OK)
             {
                 return ACC_ERROR;
             }
@@ -417,7 +444,7 @@ ACC_Error_t ACC_setDetectionMode(ACC_DetectionMode_t detectionMode, uint8_t thre
         case ACC_DetectionOff:
         default:
         {
-            if(!LIS2DE12_WriteReg(LIS2DE_INT2_CFG, 0))
+            if(LIS2DE12_WriteReg(LIS2DE_INT2_CFG, 0) != LIS2DE12_OK)
             {
                 return ACC_ERROR;
             }
@@ -429,13 +456,13 @@ ACC_Error_t ACC_setDetectionMode(ACC_DetectionMode_t detectionMode, uint8_t thre
     {
         //Basic threshold can be 100
         //100 x 16mg = 1.5g
-        if(!LIS2DE12_WriteReg(LIS2DE_INT2_THS, threshold))
+        if(LIS2DE12_WriteReg(LIS2DE_INT2_THS, threshold) != LIS2DE12_OK)
         {
             return ACC_ERROR;
         }
 
         //Duration basic value should be 6
-        if(!LIS2DE12_WriteReg(LIS2DE_INT2_DURATION, duration))
+        if(LIS2DE12_WriteReg(LIS2DE_INT2_DURATION, duration) != LIS2DE12_OK)
         {
             return ACC_ERROR;
         }

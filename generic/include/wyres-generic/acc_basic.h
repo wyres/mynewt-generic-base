@@ -66,18 +66,18 @@ ACC_Error_t ACC_sleep();
 ACC_Error_t ACC_readXYZ(int8_t* xp, int8_t* yp, int8_t* zp);
 
 /*!
- * @brief   Ask the accelerometer if there was a movement since last check
- * @param   void
- * @return  true if movement was detected
+ * @brief       Check Pin state to know if board has moved
+ * @param[OUT]  Pointer to where data will be written
+ * @return      ACC_SUCCESS or ACC_ERROR
  */
-bool ACC_HasDetectedMoved(void);
+ACC_Error_t ACC_HasDetectedMoved(bool *hasDetectedMove)
 
 /*!
- * @brief   Ask the accelerometer if there was a shock of free fall since last check
- * @param   void
- * @return  true if movement was detected
+ * @brief       Check Pin state to know if board has fall
+ * @param[OUT]  Pointer to where data will be written
+ * @return      ACC_SUCCESS or ACC_ERROR
  */
-bool ACC_HasDetectedFreeFallOrShock(void);
+ACC_Error_t ACC_HasDetectedFreeFallOrShock(bool *hasDetectedMove)
 
 /*!
  * @brief     Set detection mode of accelerometer
