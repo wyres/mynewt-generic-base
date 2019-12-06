@@ -451,7 +451,7 @@ static int mapSF2DR(int sf) {
         case LORAWAN_FSK250: 
             return 6;
         default:
-            return 5;
+            return 2;       // If your SF is weird, you get SF10
     }
 }
 static bool configTxSocket(lorawan_sock_t skt, bool useAck, LORAWAN_SF_t sf, int txPower) {
@@ -500,7 +500,7 @@ static bool do_lora_send(TxLoraWanReq_t* req) {
     int ret = lorawan_send(_loraCtx.sock_tx, req->port, req->data, req->sz);
     switch(ret) {
         case LORAWAN_STATUS_OK: {
-            log_debug("LW:tx %d bytes ok on port:%d sf:%d txpower:%d ackReq:%d doRx %d]\r\n",
+            log_debug("LW:tx %d bytes ok on port:%d sf:%d txpower:%d ackReq:%d doRx %d]",
                 req->sz, req->port, 
                 req->sf, req->power, req->reqAck,
                 req->doRx);
@@ -567,8 +567,8 @@ static struct {
     .l=4,           // length of value is 4 bytes
 };
 
-// Try to JOIN. Caller should check beforehand if we are already joined....
-static bool do_lora_join(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, LORAWAN_SF_t sf, bool doADR) {
+// Try to JOIN using the config already set in init(). Caller should check beforehand if we are already joined....
+static bool do_lora_join() {
     // no explicit join phase currently with KLK wrapper. 
     // send a simple UL with our own CB to force it to do so
     TxLoraWanReq_t* req = &_loraCtx.txLoraWANReq;
@@ -578,7 +578,7 @@ static bool do_lora_join(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, LORA
     req->data = (uint8_t*)(&_joinUL);
     req->sz = sizeof(_joinUL);        // we send just our uptime
     req->port = 1;
-    req->sf = sf;
+    req->sf = _loraCtx.defaultSF;
     req->power = _loraCtx.defaultLWPower;  
     req->doRx = true;
     req->reqAck = false;
@@ -604,8 +604,8 @@ static void execReqEvent(struct os_event* e) {
                     _loraCtx.joinLoraWANReq.cbfn=NULL;
                 }
             } else {
-                // try to send a JOIN request
-                if (do_lora_join(_loraCtx.deveui, _loraCtx.appeui, _loraCtx.appkey, _loraCtx.defaultSF, _loraCtx.useADR)) {
+                // try to send a JOIN request (devEUI, appKey, use ADR etc already setup in init)
+                if (do_lora_join()) {
                     // in progress
                 } else {
                     // oopsie
@@ -672,7 +672,7 @@ static void lp_change(LP_MODE_t prevmode, LP_MODE_t newmode) {
 }
 
 // initialise lorawan stack with our config. Called by application before using stack.
-void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
+void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, bool enableADR, LORAWAN_SF_t defaultSF, int8_t defaultTxPower) {
     // Ensure all 0s, makes sure cbfns etc all as unused etc
     memset(&_loraCtx, 0, sizeof(_loraCtx));
 
@@ -692,8 +692,9 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
     for(int i=0;i<16;i++) {
         _loraCtx.appkey[i] = appKey[i];
     }
-    _loraCtx.defaultSF = LORAWAN_SF10;
-    _loraCtx.defaultLWPower = 14;            // TODO - max for the region or ADRised
+    _loraCtx.useADR = enableADR;
+    _loraCtx.defaultSF = defaultSF;
+    _loraCtx.defaultLWPower = defaultTxPower;
     // init events (mutex, q, each event in the pool)
     os_mutex_init(&_loraCtx.lwevts_mutex);
     for(int i=0;i<MAX_LWEVTS;i++) {
@@ -718,19 +719,18 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
     }
     */
 
-    // Ok, ready to setup KLK Lorawan wrapper. TBD, could do this in lorawan_join()? but then gotta deal with re-joins etc...
+    // Ok, ready to setup KLK Lorawan wrapper. In theory could do this in lorawan_join()? but then gotta deal with re-joins etc...
     uint8_t nb_rep = 1;
-    int8_t txPower = 14;        // set on a per-tx basis
-    int status = lorawan_configure_OTAA(_loraCtx.deveui, _loraCtx.appeui, _loraCtx.appkey, nb_rep, ((14-txPower)/2), lora_api_getCurrentRegion());
+    // Note that the txPower is set for each individual tx. Note also that the KLK code expects it as a 'power level' which is not directly the XdBm everyone uses...
+    int status = lorawan_configure_OTAA(_loraCtx.deveui, _loraCtx.appeui, _loraCtx.appkey, nb_rep, ((14-_loraCtx.defaultLWPower)/2), lora_api_getCurrentRegion());
     assert(status == LORAWAN_STATUS_OK);
 //    } else {
-//        int status = lorawan_configure_ABP(_loraCfg.devAddr, _loraCfg.nwkSkey, _loraCfg.appSkey, nb_rep, ((14-_loraCfg.txPower)/2), lora_api_getCurrentRegion());
+//        int status = lorawan_configure_ABP(_loraCfg.devAddr, _loraCfg.nwkSkey, _loraCfg.appSkey, nb_rep, ((14-_loraCfg.defaultLWPower)/2), lora_api_getCurrentRegion());
 //        assert(status == LORAWAN_STATUS_OK);
 //        log_debug("Started LoRaWAN OK in ABP mode [with devAddr:%08lx]", _loraCfg.devAddr);
 //    }
 
-
-    // TODO this is not reglo
+    // must be reglo
     lorawan_set_dutycycle(false);
 
     /* 1st action: obtain a socket from the LoRaWAN API */
@@ -758,8 +758,9 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey) {
     _loraCtx.lpUserId = LPMgr_register(lp_change);
 
     // ok lorawan api all init ok
-    log_info("LW: cfgd [%02x%02x%02x%02x%02x%02x%02x%02x]",
-            _loraCtx.deveui[0],_loraCtx.deveui[1],_loraCtx.deveui[2],_loraCtx.deveui[3],_loraCtx.deveui[4],_loraCtx.deveui[5],_loraCtx.deveui[6],_loraCtx.deveui[7]);
+    log_info("LW: cfgd [%02x%02x%02x%02x%02x%02x%02x%02x] adr:%d, sf:%d, txpower:%d",
+            _loraCtx.deveui[0],_loraCtx.deveui[1],_loraCtx.deveui[2],_loraCtx.deveui[3],_loraCtx.deveui[4],_loraCtx.deveui[5],_loraCtx.deveui[6],_loraCtx.deveui[7],
+            _loraCtx.useADR, _loraCtx.defaultSF, _loraCtx.defaultLWPower);
 
 }
 
@@ -779,6 +780,7 @@ static void callTxCB(lorawan_event_t txev) {
             // Check if we are joined
             if (lora_api_isJoined()) {
                 log_debug("LW:tx ev ERR %d (BUT joined)", txev);
+                // Duty cycle or the like, try again later please
                 (*txcbfn)(userctx, LORAWAN_RES_OCC);
             } else {
                 // Not joined this is why an error

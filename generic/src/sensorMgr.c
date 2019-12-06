@@ -365,11 +365,11 @@ static void readEnv() {
         }
         if (BATTERY_GPIO>=0) {
             _ctx.currBattmV = GPIO_readADCmV(BATTERY_GPIO);
-            log_debug("S bat %d", _ctx.currBattmV);
+//            log_debug("S bat %d", _ctx.currBattmV);
         }
         if (LIGHT_SENSOR>=0) {
             _ctx.currLight = GPIO_readADCmV(LIGHT_SENSOR)/16;  // 12 bit value, divide down to give a 8 bit value
-            log_debug("S lum %d", _ctx.currLight);
+//            log_debug("S lum %d", _ctx.currLight);
         }
         if (GPIO_ADC1>=0) {
             _ctx.currADC1mV = GPIO_readADCmV(GPIO_ADC1);
