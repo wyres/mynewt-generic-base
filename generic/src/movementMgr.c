@@ -159,19 +159,25 @@ void MMMgr_check()
         log_debug("mm:check");
         if (ACC_HasDetectedMoved(&hasDetected) == ACC_SUCCESS) 
         {
-            _ctx.movedSinceLastCheck = true;
-            _ctx.lastMoveTime = TMMgr_getRelTime();
-            log_debug("mm:MOVED");
+            if (hasDetected)
+            {
+                _ctx.movedSinceLastCheck = true;
+                _ctx.lastMoveTime = TMMgr_getRelTime();
+                log_debug("mm:MOVED");
+            }
         }
         else
         {
             log_warn("Accelero move detection failed");
         }
-        
+        hasDetected = false;
         if (ACC_HasDetectedFreeFallOrShock(&hasDetected) == ACC_SUCCESS) 
         {
-            _ctx.lastFallTime = TMMgr_getRelTime();
-            log_debug("mm:FALLEN");
+            if (hasDetected)
+            {
+                _ctx.lastFallTime = TMMgr_getRelTime();
+                log_debug("mm:FALLEN");
+            }
         }
         else
         {

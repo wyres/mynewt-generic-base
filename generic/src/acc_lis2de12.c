@@ -402,7 +402,7 @@ ACC_Error_t ACC_HasDetectedFreeFallOrShock(bool *hasDetectedMove)
     uint8_t Rx = 0;
     *hasDetectedMove = false;
 
-    Lif (LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx) != LIS2DE12_OK)
+    if (LIS2DE12_ReadReg(LIS2DE_INT2_SOURCE, &Rx) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }

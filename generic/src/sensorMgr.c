@@ -459,7 +459,7 @@ static void readEnv()
             {
                 log_debug("Error while putting altimeter in sleep mode");
             }
-            log_debug("S temperature %.2f C°", (float)_ctx.currTempdC / 100);
+            log_debug("S temperature %d centi C°", _ctx.currTempdC);
             log_debug("S pressure %d Pa", _ctx.currPressurePa);
         }
         else
