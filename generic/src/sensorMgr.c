@@ -18,11 +18,15 @@
 #include "bsp/bsp.h"
 #include "hal/hal_i2c.h"
 
+#include "app-core/app_core.h"
+
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/gpiomgr.h"
 
 #include "wyres-generic/sensormgr.h"
+#include "wyres-generic/configmgr.h"
+#include "wyres-generic/ALTI_basic.h"
 
 // debug : must disable ext-button reading if using it for debug output
 #if MYNEWT_VAL(UART_DBG)
@@ -57,7 +61,7 @@ static struct {
     bool isActive;
     int16_t currTempdC;
     uint16_t currBattmV;
-    uint32_t currPressurePa;
+    int32_t currPressurePa;
     uint8_t currLight;
     int16_t lastTempdC;
     uint16_t lastBattmV;
@@ -193,7 +197,7 @@ int16_t SRMgr_getTempdC() {
 bool SRMgr_hasPressureChanged() {
     return (delta(_ctx.currPressurePa, _ctx.lastPressurePa)>10);
 }
-uint32_t SRMgr_getPressurePa() {
+int32_t SRMgr_getPressurePa() {
     readEnv();
     return _ctx.currPressurePa;       // in Pa
 }
@@ -342,6 +346,10 @@ static void config() {
     }
     // config alti on i2c
     // TODO
+    if (ALTI_init() != ALTI_SUCCESS)
+    {
+        log_debug("Failed to activate altimeter");
+    }
     // config noise detector on micro
     // TODO
 }
@@ -368,6 +376,25 @@ static void readEnv() {
         }
         if (GPIO_ADC2>=0) {
             _ctx.currADC2mV = GPIO_readADCmV(GPIO_ADC2);
+        }
+        if (ALTI_activate() == ALTI_SUCCESS)
+        {
+            int32_t pressureOffset = 0;
+            CFMgr_getElement(CFG_UTIL_KEY_ENV_PRESSURE_OFFSET, &pressureOffset, sizeof(pressureOffset));
+            if (ALTI_readAllData(&_ctx.currPressurePa, pressureOffset, &_ctx.currTempdC) != ALTI_SUCCESS)
+            {
+                log_debug("Error while reading altimeter data");
+            }
+            if (ALTI_sleep() != ALTI_SUCCESS)
+            {
+                log_debug("Error while putting altimeter in sleep mode");
+            }
+            log_debug("S temperature %.2f C°", (float)_ctx.currTempdC / 100);
+            log_debug("S pressure %d Pa", _ctx.currPressurePa);
+        }
+        else
+        {
+            log_debug("Error while activating altimeter");
         }
     }
 }

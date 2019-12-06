@@ -46,7 +46,7 @@ void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb);
 // When did temp, pressure, battery, light last change 'significantly'?
 uint32_t SRMgr_getLastEnvChangeTime();
 int16_t SRMgr_getTempdC();
-uint32_t SRMgr_getPressurePa();
+int32_t SRMgr_getPressurePa();
 uint16_t SRMgr_getBatterymV();
 uint8_t SRMgr_getLight();
 uint16_t SRMgr_getADC1mV();
