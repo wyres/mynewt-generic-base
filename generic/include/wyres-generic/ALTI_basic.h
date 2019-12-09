@@ -69,14 +69,14 @@ ALTI_Error_t ALTI_calibratePressure(int16_t referencePressure);
  * @param[OUT]  Pointer to where temperature will be written
  * @return      ALTI_SUCCESS on success, ALTI_ERROR otherwise
  */
-ALTI_Error_t ALTI_readAllData(int32_t *pressure, int32_t deltaPressure, int16_t *temperature);
+ALTI_Error_t ALTI_readAllData(int32_t *pressure, int16_t *temperature);
 
 /*!
  * @brief       Read pressure
  * @param[OUT]  Pointer to where pressure will be written
  * @return      ALTI_SUCCESS on success, ALTI_ERROR otherwise
  */
-ALTI_Error_t ALTI_readPressure(int32_t *pressure, int32_t deltaPressure);
+ALTI_Error_t ALTI_readPressure(int32_t *pressure);
 /*!
  * @brief       Read temperature
  * @param[OUT]  Pointer to where temperature will be written

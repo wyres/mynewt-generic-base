@@ -449,9 +449,7 @@ static void readEnv()
         }
         if (ALTI_activate() == ALTI_SUCCESS)
         {
-            int32_t pressureOffset = 0;
-            CFMgr_getElement(CFG_UTIL_KEY_ENV_PRESSURE_OFFSET, &pressureOffset, sizeof(pressureOffset));
-            if (ALTI_readAllData(&_ctx.currPressurePa, pressureOffset, &_ctx.currTempdC) != ALTI_SUCCESS)
+            if (ALTI_readAllData(&_ctx.currPressurePa, &_ctx.currTempdC) != ALTI_SUCCESS)
             {
                 log_debug("Error while reading altimeter data");
             }

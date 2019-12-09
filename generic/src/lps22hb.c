@@ -2935,9 +2935,9 @@ ALTI_Error_t ALTI_calibratePressure(int16_t referencePressure)
     return ALTI_SUCCESS;
 }
 
-ALTI_Error_t ALTI_readAllData(int32_t *pressure, int32_t deltaPressure, int16_t *temperature)
+ALTI_Error_t ALTI_readAllData(int32_t *pressure, int16_t *temperature)
 {
-    if (ALTI_readPressure(pressure, deltaPressure) != ALTI_SUCCESS)
+    if (ALTI_readPressure(pressure) != ALTI_SUCCESS)
     {
       return ALTI_ERROR;
     }
@@ -2948,14 +2948,12 @@ ALTI_Error_t ALTI_readAllData(int32_t *pressure, int32_t deltaPressure, int16_t 
     return ALTI_SUCCESS;
 }
 
-ALTI_Error_t ALTI_readPressure(int32_t *pressure, int32_t deltaPressure)
+ALTI_Error_t ALTI_readPressure(int32_t *pressure)
 {
     if (LPS22HB_Get_Pressure(pressure)!= LPS22HB_OK)
     {
       return ALTI_ERROR;
     }
-    //Substract delta pressure to get a normal value
-    *pressure -= deltaPressure;
     return ALTI_SUCCESS;
 }
 
