@@ -35,6 +35,8 @@ static char* BLE_SCAN_STOP="AT+STOP\r\n";
 
 static char* BLE_TYPE_SCANNER="AT+TYPE=0\r\n";
 static char* BLE_TYPE_IBEACON="AT+TYPE=2\r\n";
+#define TYPE_SCANNER    (1)
+#define TYPE_IBEACON    (3)
 
 //static os_stack_t _wble_task_stack[WBLE_TASK_STACK_SZ];
 //static struct os_task wble_mgr_task_str;
@@ -53,6 +55,7 @@ static struct blectx {
     uint32_t lastDataTime;
     WBLE_CB_FN_t cbfn;
     uint8_t uuid[16];
+    uint32_t cardType;
     uint16_t majorStart;
     uint16_t majorEnd;
     uint8_t ibListSz;
@@ -67,7 +70,7 @@ static struct blectx {
     .cbfn=NULL,
 };
 // State machine for BLE control
-enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_WAIT_TYPE, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, 
+enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_WAIT_TYPE_SCAN, MS_BLE_WAIT_TYPE_IB, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, 
     MS_BLE_IBEACON, MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
 enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_SCAN, ME_BLE_IBEACON, ME_BLE_STOP, ME_BLE_RET_OK, ME_BLE_RET_ERR, ME_BLE_RET_INT,
      ME_BLE_UPDATE, ME_BLE_UART_OK, ME_BLE_UART_NOK };
@@ -207,37 +210,7 @@ static SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-// Put module into scanner mode and wait for response
-static SM_STATE_ID_t State_WaitTypeSet(void* arg, int e, void* data) {
-    struct blectx* ctx = (struct blectx*)arg;
-    switch(e) {
-        case SM_ENTER: {
-            sm_timer_start(ctx->mySMId, 500);
-            wskt_write(ctx->cnx, (uint8_t*)BLE_TYPE_SCANNER, strlen(BLE_TYPE_SCANNER));
-            log_debug("BLE: set type");
-            return SM_STATE_CURRENT;
-        }
-        case SM_EXIT: {
-            return SM_STATE_CURRENT;
-        }
-        case SM_TIMEOUT: {
-            return MS_BLE_STARTING;
-        }
-        case ME_BLE_RET_OK: {
-//            log_debug("BLE: type change ok");
-            return MS_BLE_STARTING;
-        }
-        case ME_BLE_OFF: {
-            // gave up
-            return MS_BLE_OFF;
-        }            
-        default: {
-            log_debug("BLE:? %d in WaitTypeSet", e);
-            return SM_STATE_CURRENT;
-        }
-    }
-    assert(0);      // shouldn't get here
-}
+
 // power on, send WHO to check comm ok
 static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
@@ -263,7 +236,8 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
         }
         case ME_BLE_RET_OK: {
 //            log_debug("BLE: response");
-            // TODO Check if response is 'scanner', set type if not?
+            // Normally the who response is the data value. Store it for later
+            ctx->cardType = (uint32_t)data;
             // if cb call it
             if (ctx->cbfn!=NULL) {
                 (*ctx->cbfn)(WBLE_COMM_OK, NULL);
@@ -286,9 +260,6 @@ static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
-            // Dont change type if already in the right one (as causes the ble to reset and not respond to scan command)
-            // Ensure in scan mode (but shouldn't be actively scanning)
-//            wskt_write(ctx->cnx, (uint8_t*)BLE_TYPE_SCANNER, strlen(BLE_TYPE_SCANNER));
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -308,15 +279,89 @@ static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
             return MS_BLE_STOPPINGCOMM;
         }            
         case ME_BLE_SCAN: {
+            if (ctx->cardType!=TYPE_SCANNER) {
+                log_debug("BLE:card says type %d, but we want to scan", ctx->cardType);
+                return MS_BLE_WAIT_TYPE_SCAN;
+            }
             // Start scanning
             return MS_BLE_SCANNING;
         }
         case ME_BLE_IBEACON: {
+            if (ctx->cardType!=TYPE_IBEACON) {
+                log_debug("BLE:card says type %d, but we want to ibeacon", ctx->cardType);
+                return MS_BLE_WAIT_TYPE_IB;
+            }
             // Start beaconning
             return MS_BLE_IBEACON;
         }
         default: {
             log_debug("BLE:? %d in On", e);
+            return SM_STATE_CURRENT;
+        }
+    }
+    assert(0);      // shouldn't get here
+}
+// Put module into scanner mode and wait for response, then go to scanning
+static SM_STATE_ID_t State_WaitTypeSetScanner(void* arg, int e, void* data) {
+    struct blectx* ctx = (struct blectx*)arg;
+    switch(e) {
+        case SM_ENTER: {
+            sm_timer_start(ctx->mySMId, 500);
+            wskt_write(ctx->cnx, (uint8_t*)BLE_TYPE_SCANNER, strlen(BLE_TYPE_SCANNER));
+            log_debug("BLE: set type scanner");
+            return SM_STATE_CURRENT;
+        }
+        case SM_EXIT: {
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
+            ctx->cardType=TYPE_SCANNER;     // Assume it changed ok
+            return MS_BLE_SCANNING;
+        }
+        case ME_BLE_RET_OK: {
+//            log_debug("BLE: type change ok");
+            ctx->cardType=TYPE_SCANNER;     // Assume it changed ok
+            return MS_BLE_SCANNING;
+        }
+        case ME_BLE_OFF: {
+            // gave up
+            return MS_BLE_OFF;
+        }            
+        default: {
+            log_debug("BLE:? %d in WaitTypeSetScanner", e);
+            return SM_STATE_CURRENT;
+        }
+    }
+    assert(0);      // shouldn't get here
+}
+// Put module into scanner mode and wait for response
+static SM_STATE_ID_t State_WaitTypeSetIBeacon(void* arg, int e, void* data) {
+    struct blectx* ctx = (struct blectx*)arg;
+    switch(e) {
+        case SM_ENTER: {
+            sm_timer_start(ctx->mySMId, 500);
+            wskt_write(ctx->cnx, (uint8_t*)BLE_TYPE_IBEACON, strlen(BLE_TYPE_IBEACON));
+            log_debug("BLE: set type IB");
+            return SM_STATE_CURRENT;
+        }
+        case SM_EXIT: {
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
+            ctx->cardType=TYPE_IBEACON;     // Assume it changed ok
+            return MS_BLE_IBEACON;
+        }
+        case ME_BLE_RET_OK: {
+//            log_debug("BLE: type change ok");
+            ctx->cardType=TYPE_IBEACON;     // Assume it changed ok
+            return MS_BLE_IBEACON;
+        }
+        case ME_BLE_OFF: {
+            // gave up
+            return MS_BLE_OFF;
+        }            
+        default: {
+            log_debug("BLE:? %d in WaitTypeSetIBeacon", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -338,7 +383,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             }
             // poll every second
             sm_timer_start(ctx->mySMId, 1000);
-            log_info("BLE:scanning..");
+            log_info("BLE:scanning[%d->%d]", ctx->majorStart, ctx->majorEnd);
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -473,7 +518,8 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
 static const SM_STATE_t _bleSM[MS_BLE_LAST] = {
     {.id=MS_BLE_OFF,        .name="BleOff",       .fn=State_Off},
     {.id=MS_BLE_WAITPOWERON,.name="BleWaitPower", .fn=State_WaitPoweron},
-    {.id=MS_BLE_WAIT_TYPE,  .name="BleWaitType", .fn=State_WaitTypeSet},
+    {.id=MS_BLE_WAIT_TYPE_SCAN,  .name="BleWaitTypeScan", .fn=State_WaitTypeSetScanner},
+    {.id=MS_BLE_WAIT_TYPE_IB,  .name="BleWaitTypeIB", .fn=State_WaitTypeSetIBeacon},
     {.id=MS_BLE_STARTING,   .name="BleStarting",  .fn=State_Starting},    
     {.id=MS_BLE_ON,         .name="BleOnIdle", .fn=State_On},
     {.id=MS_BLE_SCANNING,   .name="BleScanning", .fn=State_Scanning},    
@@ -711,9 +757,10 @@ static void wble_mgr_rxcb(struct os_event* ev) {
        sm_sendEvent(_ctx.mySMId, ME_BLE_RET_ERR, NULL);
     } else if (strlen(line)<15) {
         // Any none OK/ERROR/ble info line is considered as OK
-//        uint32_t val = atoi(line);
+        uint32_t val = atoi(line);
 //        sm_sendEvent(_ctx.mySMId, ME_BLE_RET_INT, (void*)val);
-        sm_sendEvent(_ctx.mySMId, ME_BLE_RET_OK, NULL);
+        log_debug("BLE:[%s]", line);
+        sm_sendEvent(_ctx.mySMId, ME_BLE_RET_OK, (void*)val);
     } else {
         // Parse it as ibeacon data
         ibeacon_data_t ib;
