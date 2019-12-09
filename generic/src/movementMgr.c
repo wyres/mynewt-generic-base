@@ -52,18 +52,29 @@ static struct {
 } _ctx;
 
 // low power state change callback
-void lp_change(LP_MODE_t prev, LP_MODE_t new) {
-    if (new>=LP_DEEPSLEEP) {
-        ACC_sleep();
+void lp_change(LP_MODE_t prev, LP_MODE_t new) 
+{
+    if (new>=LP_DEEPSLEEP)
+    {
+        if (ACC_sleep() != ACC_SUCCESS)
+        {
+            log_warn("Accelero failed to go to sleep");
+        }
         // deinit I2C in BSP?
         // TODO
-    } else {
+    } 
+    else 
+    {
         // init I2C in BSP?
-        ACC_activate();
+        if (ACC_activate() != ACC_SUCCESS)
+        {
+            log_warn("Accelero failed to activate");
+        }
     }
 }
 
-void movement_init(void) {
+void movement_init(void) 
+{
     //Accelero config
     ACC_DetectionMode_t detectionMode = ACC_DetectionOff;
     uint8_t threshold = 0;
@@ -115,9 +126,12 @@ void movement_init(void) {
     _ctx.lpUserId = LPMgr_register(lp_change);
 }
 
-bool MMMgr_registerMovementCB(MM_CBFN_t cb) {
-    for(int i=0;i<MAX_MMCBFNS;i++) {
-        if (_ctx.movecbs[i]==NULL) {
+bool MMMgr_registerMovementCB(MM_CBFN_t cb) 
+{
+    for(int i=0;i<MAX_MMCBFNS;i++) 
+    {
+        if (_ctx.movecbs[i]==NULL) 
+        {
             _ctx.movecbs[i] = cb;
             return true;
         }
@@ -125,8 +139,10 @@ bool MMMgr_registerMovementCB(MM_CBFN_t cb) {
     return false;
 }
 bool MMMgr_registerOrientationCB(MM_CBFN_t cb) {
-    for(int i=0;i<MAX_MMCBFNS;i++) {
-        if (_ctx.orientcbs[i]==NULL) {
+    for(int i=0;i<MAX_MMCBFNS;i++) 
+    {
+        if (_ctx.orientcbs[i]==NULL) 
+        {
             _ctx.orientcbs[i] = cb;
             return true;
         }
@@ -135,51 +151,91 @@ bool MMMgr_registerOrientationCB(MM_CBFN_t cb) {
 }
 // poll accelero for x,y,z,moved,fall,shock
 // TODO possbily should 'start'/'stop' to let accelero have time to decide which way is up before reading values?
-void MMMgr_check() {
-    if (ACC_activate() == ACC_SUCCESS) {
+void MMMgr_check() 
+{
+    bool hasDetected = false;
+    if (ACC_activate() == ACC_SUCCESS) 
+    {
         log_debug("mm:check");
-        if (ACC_HasDetectedMoved()) {
-            _ctx.movedSinceLastCheck = true;
-            _ctx.lastMoveTime = TMMgr_getRelTime();
-            log_debug("mm:MOVED");
+        if (ACC_HasDetectedMoved(&hasDetected) == ACC_SUCCESS) 
+        {
+            if (hasDetected)
+            {
+                _ctx.movedSinceLastCheck = true;
+                _ctx.lastMoveTime = TMMgr_getRelTime();
+                log_debug("mm:MOVED");
+            }
         }
-        if (ACC_HasDetectedFreeFallOrShock()) {
-            _ctx.lastFallTime = TMMgr_getRelTime();
-            log_debug("mm:FALLEN");
+        else
+        {
+            log_warn("Accelero move detection failed");
         }
-        ACC_readXYZ(&_ctx.x, &_ctx.y, &_ctx.z);
-        log_debug("x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
-        ACC_sleep();
-    } else {
+        hasDetected = false;
+        if (ACC_HasDetectedFreeFallOrShock(&hasDetected) == ACC_SUCCESS) 
+        {
+            if (hasDetected)
+            {
+                _ctx.lastFallTime = TMMgr_getRelTime();
+                log_debug("mm:FALLEN");
+            }
+        }
+        else
+        {
+            log_warn("Accelero move detection failed");
+        }
+
+        if (ACC_readXYZ(&_ctx.x, &_ctx.y, &_ctx.z) == ACC_SUCCESS)
+        {
+            log_debug("x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
+        }
+        else
+        {
+            log_warn("Accelero failed to read raw data");
+        }  
+        if (ACC_sleep() != ACC_SUCCESS)
+        {
+            log_warn("Accelero failed to go to sleep");
+        }
+    } 
+    else 
+    {
         log_warn("mm:accelero failed to activate");
     }
     checkMoved();
     checkOrientationChange();
 }
 
-uint32_t MMMgr_getLastMovedTime() {
+uint32_t MMMgr_getLastMovedTime() 
+{
     return _ctx.lastMoveTime;
 }
-bool MMMgr_hasMovedSince(uint32_t reltime) {
+bool MMMgr_hasMovedSince(uint32_t reltime) 
+{
     return (_ctx.lastMoveTime>reltime);
 }
-uint32_t MMMgr_getLastFallTime() {
+uint32_t MMMgr_getLastFallTime() 
+{
     return _ctx.lastFallTime;
 }
-bool MMMgr_hasFallenSince(uint32_t reltime) {
+bool MMMgr_hasFallenSince(uint32_t reltime)
+{
     return (_ctx.lastFallTime>reltime);
 }
 
-uint32_t MMMgr_getLastShockTime() {
+uint32_t MMMgr_getLastShockTime() 
+{
     return _ctx.lastShockTime;
 }
-bool MMMgr_hasShockedSince(uint32_t reltime) {
+bool MMMgr_hasShockedSince(uint32_t reltime) 
+{
     return (_ctx.lastShockTime>reltime);
 }
-uint32_t MMMgr_getLastOrientTime() {
+uint32_t MMMgr_getLastOrientTime() 
+{
     return _ctx.lastOrientTime;
 }
-MM_ORIENT MMMgr_getOrientation() {
+MM_ORIENT MMMgr_getOrientation() 
+{
     // evaluate x/y/z to determine this
     if (_ctx.x>0 && _ctx.x>_ctx.y && _ctx.x>_ctx.z) {
         return UPRIGHT;
@@ -196,36 +252,48 @@ MM_ORIENT MMMgr_getOrientation() {
     return UNKNOWN;
 }
 // in units of G/10 (decaG)
-int8_t MMMgr_getXdG() {
+int8_t MMMgr_getXdG()
+{
     return _ctx.x;
 }
-int8_t MMMgr_getYdG() {
+int8_t MMMgr_getYdG() 
+{
     return _ctx.y;
 }
-int8_t MMMgr_getZdG() {
+int8_t MMMgr_getZdG() 
+{
     return _ctx.z;
 }
 
 // internals
-static void callMovedCBs() {
-    for(int i=0;i<MAX_MMCBFNS;i++) {
-        if (_ctx.movecbs[i]!=NULL) {
+static void callMovedCBs() 
+{
+    for(int i=0;i<MAX_MMCBFNS;i++) 
+    {
+        if (_ctx.movecbs[i]!=NULL) 
+        {
             (*_ctx.movecbs[i])();
         }
     }
 }
-static void checkMoved() {
-    if (_ctx.movedSinceLastCheck) {
+static void checkMoved() 
+{
+    if (_ctx.movedSinceLastCheck) 
+    {
         callMovedCBs();
         _ctx.movedSinceLastCheck = false;
     }
 }
-static void checkOrientationChange() {
-    if (MMMgr_getOrientation() != _ctx.orientation) {
+static void checkOrientationChange() 
+{
+    if (MMMgr_getOrientation() != _ctx.orientation) 
+    {
         _ctx.lastOrientTime = TMMgr_getRelTime();
         _ctx.orientation = MMMgr_getOrientation();
-        for(int i=0;i<MAX_MMCBFNS;i++) {
-            if (_ctx.orientcbs[i]!=NULL) {
+        for(int i=0;i<MAX_MMCBFNS;i++) 
+        {
+            if (_ctx.orientcbs[i]!=NULL) 
+            {
                 (*_ctx.orientcbs[i])();
             }
         }
