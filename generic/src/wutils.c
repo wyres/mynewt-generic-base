@@ -296,3 +296,38 @@ void wlog_init(void) {
 //    log_init_dbg(0);      // dont do blocking tx please
     assert(res);
 }
+
+// More utility functions
+/*
+ * Write a 32 bit unsigned int as LE format into a buffer at specified offset. 
+ */
+void Util_writeLE_uint32_t(uint8_t* b, uint8_t offset, uint32_t v) {
+    b[offset] = (uint8_t)(v & 0xFF);
+    b[offset+1] = (uint8_t)((v & 0xFF00) >> 8);
+    b[offset+2] = (uint8_t)((v & 0xFF0000) >> 16);
+    b[offset+3] = (uint8_t)((v & 0xFF000000) >> 24);
+}
+
+/*
+ * Write a 32 bit signed int as LE format into a buffer at specified offset. 
+ */
+void Util_writeLE_int32_t(uint8_t* b, uint8_t offset, int32_t v) {
+    b[offset] = (uint8_t)(v & 0xFF);
+    b[offset+1] = (uint8_t)((v & 0xFF00) >> 8);
+    b[offset+2] = (uint8_t)((v & 0xFF0000) >> 16);
+    b[offset+3] = (uint8_t)((v & 0xFF000000) >> 24);
+}
+/*
+ * Write a 16 bit unsigned int as LE format into a buffer at specified offset. 
+ */
+void Util_writeLE_uint16_t(uint8_t* b, uint8_t offset, uint16_t v) {
+    b[offset] = (uint8_t)(v & 0xFF);
+    b[offset+1] = (uint8_t)((v & 0xFF00) >> 8);
+}
+/*
+ * Write a 16 bit signed int as LE format into a buffer at specified offset. 
+ */
+void Util_writeLE_int16_t(uint8_t* b, uint8_t offset, int16_t v) {
+    b[offset] = (uint8_t)(v & 0xFF);
+    b[offset+1] = (uint8_t)((v & 0xFF00) >> 8);
+}

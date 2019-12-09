@@ -83,7 +83,23 @@ void log_fn_fn();
 uint8_t get_log_level();
 const char* get_log_level_str();
 void set_log_level(uint8_t lev);
-
+// More utility functions
+/*
+ * Write a 32 bit unsigned int as LE format into a buffer at specified offset. 
+ */
+void Util_writeLE_uint32_t(uint8_t* b, uint8_t offset, uint32_t v);
+/*
+ * Write a 32 bit signed int as LE format into a buffer at specified offset. 
+ */
+void Util_writeLE_int32_t(uint8_t* b, uint8_t offset, int32_t v); 
+/*
+ * Write a 16 bit unsigned int as LE format into a buffer at specified offset. 
+ */
+void Util_writeLE_uint16_t(uint8_t* b, uint8_t offset, uint16_t v);
+/*
+ * Write a 16 bit signed int as LE format into a buffer at specified offset. 
+ */
+void Util_writeLE_int16_t(uint8_t* b, uint8_t offset, int16_t v); 
 
 // Unittest support
 #if MYNEWT_VAL(UNITTEST) 
