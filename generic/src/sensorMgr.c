@@ -399,7 +399,7 @@ static void config()
         // Must activate GPIO that provides power to it
         GPIO_define_out("micropower", SENSOR_PWR, 1, LP_DOZE);
         GPIO_define_adc("light", LIGHT_SENSOR, LIGHT_SENSOR_ADCCHAN, LP_DOZE);
-        log_debug("S adc-light");
+//        log_debug("SM light");
     }
     if (GPIO_ADC1>=0) 
     {
@@ -412,13 +412,12 @@ static void config()
     if (BATTERY_GPIO>=0) 
     {
         GPIO_define_adc("battery", BATTERY_GPIO, BATTERY_ADCCHAN, LP_DOZE);
-        log_debug("S adc-batt");
+//        log_debug("SM:batt");
     }
     // config alti on i2c
-    // TODO
     if (ALTI_init() != ALTI_SUCCESS)
     {
-        log_debug("Failed to activate altimeter");
+        log_warn("SM:Alti_init fail");
     }
     // config noise detector on micro
     // TODO
@@ -479,18 +478,18 @@ static void readEnv()
         {
             if (ALTI_readAllData(&_ctx.currPressurePa, &_ctx.currTempdC) != ALTI_SUCCESS)
             {
-                log_debug("Error while reading altimeter data");
+                log_warn("SM:Err read alti");
             }
             if (ALTI_sleep() != ALTI_SUCCESS)
             {
-                log_debug("Error while putting altimeter in sleep mode");
+                log_warn("SM:Err sleep alti");
             }
-            log_debug("S temperature %d centi C°", _ctx.currTempdC);
-            log_debug("S pressure %d Pa", _ctx.currPressurePa);
+//            log_debug("SM:temp %d", _ctx.currTempdC);
+//            log_debug("SM:press %d", _ctx.currPressurePa);
         }
         else
         {
-            log_debug("Error while activating altimeter");
+            log_warn("SM:Erractivate alti");
         }
     }
 }
@@ -518,7 +517,7 @@ static void deconfig()
     }
     // accelero power state controlled by MovementMgr, no need for us to tell him
 
-    // config alti on i2c
+    // deconfig alti on i2c
     // TODO
     // config noise detector on micro
     // TODO
