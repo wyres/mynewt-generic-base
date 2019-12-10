@@ -41,6 +41,13 @@
 
 #define MAX_CBS (4)
 
+#define ADC_MAX_VALUE                               4095    // 12 bits max value
+// Should read the factory calibrated vref from the eerom at 0x1FF8 00F8/9
+#define ADC_VREF_BANDGAP                            1224    // vRef in mV for ADC
+
+#define LIGHT_MAX				3950
+#define LIGHT_MIN				20
+
 // store values in between checks
 static struct {
     struct {
@@ -430,21 +437,42 @@ static void readEnv()
         }
         if (BATTERY_GPIO>=0) 
         {
-            _ctx.currBattmV = GPIO_readADCmV(BATTERY_GPIO);
-//            log_debug("SM: bat %d", _ctx.currBattmV);
+            _ctx.currBattmV = GPIO_readADC(BATTERY_GPIO);
+            int ref_voltage = ( uint32_t )ADC_VREF_BANDGAP * ( uint32_t )ADC_MAX_VALUE;
+            // We don't use the VREF from calibValues here.
+            // calculate the Voltage in millivolt
+            if (_ctx.currBattmV > 0) {
+                _ctx.currBattmV = ref_voltage / ( uint32_t )_ctx.currBattmV;
+            }
+            log_debug("S bat %d", _ctx.currBattmV);
         }
         if (LIGHT_SENSOR>=0) 
         {
-            _ctx.currLight = GPIO_readADCmV(LIGHT_SENSOR)/16;  // 12 bit value, divide down to give a 8 bit value
-//            log_debug("SM: lum %d", _ctx.currLight);
+            uint16_t rawLightLevel = 0;
+            uint16_t formatedLightLevel = 0;
+            rawLightLevel = GPIO_readADC(LIGHT_SENSOR);  
+            if (rawLightLevel > LIGHT_MAX)
+            {
+                formatedLightLevel = 0xFF;
+            }
+            else if(rawLightLevel < LIGHT_MIN)
+            {
+                formatedLightLevel = 0;
+            }
+            else
+            {
+                formatedLightLevel = ((rawLightLevel * 0xFF) / LIGHT_MAX);
+            }
+            _ctx.currLight = (uint8_t)formatedLightLevel;
+            log_debug("S lum %d", _ctx.currLight);
         }
         if (GPIO_ADC1>=0) 
         {
-            _ctx.currADC1mV = GPIO_readADCmV(GPIO_ADC1);
+            _ctx.currADC1mV = GPIO_readADC(GPIO_ADC1);
         }
         if (GPIO_ADC2>=0) 
         {
-            _ctx.currADC2mV = GPIO_readADCmV(GPIO_ADC2);
+            _ctx.currADC2mV = GPIO_readADC(GPIO_ADC2);
         }
         if (ALTI_activate() == ALTI_SUCCESS)
         {

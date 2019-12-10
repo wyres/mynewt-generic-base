@@ -47,7 +47,7 @@ void GPIO_irq_disable(int8_t pin);
 
 int GPIO_write(int8_t pin, int val);
 int GPIO_read(int8_t pin); 
-int GPIO_readADCmV(int8_t pin); 
+int GPIO_readADC(int8_t pin); 
 #ifdef __cplusplus
 }
 #endif
