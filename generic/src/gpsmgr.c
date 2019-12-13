@@ -418,6 +418,9 @@ static void gps_mgr_rxcb(struct os_event* ev) {
     assert(line!=NULL);
     if (strnlen(line, 10)<10) {
         // too short line ignore
+#ifdef DEBUG_GPS
+        log_debug("GM:bad [%s]", line);
+#endif /* DEBUG_GPS */
         return;
     }
     // parse it
@@ -499,7 +502,10 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
                 }
             } else {
                 // hmmm not so good
-                log_debug("GPS:gga bad");
+#ifdef DEBUG_GPS
+                log_debug("GPS:gga bad[%s]",line);
+#endif
+                return false;
             }
             return true;
         }
@@ -545,7 +551,9 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
             return true;
         }
         case MINMEA_SENTENCE_VTG: {
+#ifdef DEBUG_GPS
             log_debug("GPS:VTG");
+#endif /* DEBUG_GPS */
             return true;
         }
         case MINMEA_SENTENCE_ZDA: {
