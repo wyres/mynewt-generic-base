@@ -100,6 +100,14 @@ void Util_writeLE_uint16_t(uint8_t* b, uint8_t offset, uint16_t v);
  * Write a 16 bit signed int as LE format into a buffer at specified offset. 
  */
 void Util_writeLE_int16_t(uint8_t* b, uint8_t offset, int16_t v); 
+/*
+ * helper to read 16 bit LE from buffer (may be 0 stripped)
+ */
+uint16_t Util_readLE_uint16_t(uint8_t* b, uint8_t l);
+/*
+ * helper to read 32 bit LE from buffer (may be 0 stripped)
+ */
+uint32_t Util_readLE_uint32_t(uint8_t* b, uint8_t l);
 
 // Unittest support
 #if MYNEWT_VAL(UNITTEST) 
