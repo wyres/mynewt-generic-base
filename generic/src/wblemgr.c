@@ -774,7 +774,7 @@ static void wble_mgr_rxcb(struct os_event* ev) {
         sm_sendEvent(_ctx.mySMId, ME_BLE_RET_OK, NULL);
     } else if (strlen(line)<15) {
         int val = -1;
-        if (sscanf(line, "%d", &val)<0) {
+        if (sscanf(line, "%d", &val)<1) {
             // Any none OK/ERROR/ble info line is considered as OK
 #ifdef DEBUG_BLE
             log_debug("BLE:[%s]", line);
@@ -791,8 +791,8 @@ static void wble_mgr_rxcb(struct os_event* ev) {
         // Parse it as ibeacon data
         ibeacon_data_t ib;
         uint32_t uuid;      // we don't care at this point
-        // <MMMM>,<mmmm>,<RR>,<EX>,<UUUU>
-        if (sscanf(line, "%4x,%4x,%2x,%2x,%4x", (int*)&ib.major, (int*)&ib.minor, (int*)&ib.extra, (int*)&ib.rssi, (int*)&uuid)<0) {
+        // <MMMM>,<mmmm>,<EX>,<RSSI>,<UUUU>
+        if (sscanf(line, "%4x,%4x,%2x,%2x,%4x", (int*)&ib.major, (int*)&ib.minor, (int*)&ib.extra, (int*)&ib.rssi, (int*)&uuid)<4) {
 #ifdef DEBUG_BLE
             log_debug("BLE:bad parse [%s]", line);
 #endif

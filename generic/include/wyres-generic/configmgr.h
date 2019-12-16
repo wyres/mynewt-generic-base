@@ -25,9 +25,22 @@ typedef void (*CFG_CBFN_t)(uint16_t key);
 
 bool CFMgr_registerCB(CFG_CBFN_t cb);
 bool CFMgr_addElementDef(uint16_t key, uint8_t len, void* initdata);
+/*
+ * Get a config key value into *data, creating the entry if it does not exist using the *data value and the given length
+ */
 bool CFMgr_getOrAddElement(uint16_t key, void* data, uint8_t len);
-// get an element value, returning its length, into a buffer of size maxlen
-// returns -1 if key not found
+/*
+ * Helper getOrAdd calls for specific int types that check range
+ */
+bool CFMgr_getOrAddElementCheckRangeUINT32(uint16_t key, uint32_t* data, uint32_t min, uint32_t max);
+bool CFMgr_getOrAddElementCheckRangeUINT8(uint16_t key, uint8_t* data, uint8_t min, uint8_t max);
+bool CFMgr_getOrAddElementCheckRangeINT32(uint16_t key, int32_t* data, int32_t min, int32_t max);
+bool CFMgr_getOrAddElementCheckRangeINT8(uint16_t key, int8_t* data, int8_t min, int8_t max);
+
+/* 
+ * get an element value, returning its length, into a buffer of size maxlen
+ * returns -1 if key not found
+ */
 int CFMgr_getElement(uint16_t key, void* data, uint8_t maxlen);
 uint8_t CFMgr_getElementLen(uint16_t key);
 bool CFMgr_setElement(uint16_t key, void* data, uint8_t len);
