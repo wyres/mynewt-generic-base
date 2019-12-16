@@ -30,9 +30,9 @@ wconsole : basic console handling which allows AT command set type interactions 
 
 sm_exec : FSM (state machine) framework allowing the definition of multiple table based state machines, driven by events and serially executed by a single task. 
 
-cirbuf : circular byte buffer utility implementation
+cirbuf : circular byte buffer utility implementation : thanks to Siddharth Chandrasekaran from Embed journal!
 
-cborxxx : CBOR encoding methods
+cborxxx : CBOR encoding methods : thanks to Intel Corp.
 
 /**
  * Copyright 2019 Wyres

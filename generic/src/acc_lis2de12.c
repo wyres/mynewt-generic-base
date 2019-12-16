@@ -20,6 +20,9 @@
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/acc_basic.h"
 
+/* Only include this implementation of the accelero api if the bsp says we have one of these */
+#ifdef ACC_LIS2DE12
+
 // Timeout for I2C accesses in 'ticks'
 #define I2C_ACCESS_TIMEOUT (100)
 // ACT_DUR masks
@@ -470,3 +473,5 @@ ACC_Error_t ACC_setDetectionMode(ACC_DetectionMode_t detectionMode, uint8_t thre
 
     return ACC_SUCCESS;    
 }
+
+#endif /* ACC_LIS2DE12 */

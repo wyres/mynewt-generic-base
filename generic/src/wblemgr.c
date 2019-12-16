@@ -27,9 +27,10 @@
 #define MAX_IBEACONS    MYNEWT_VAL(WBLE_MAXIBS)
 
 static char* BLE_CHECK="AT+WHO\r\n";
-//static char* BLE_CONFIG="AT+CONFIG";
-static char* BLE_POLL="AT+POLL\r\n";
-//static char* BLE_PUSH="AT+PUSH";
+//static char* BLE_CONFIG="AT+CONFIG,00B4,00B4,0000,1,1\r\n";
+// Rx mode : poll (1 shot give me the list) or push (send each id as and when received)
+static char* BLE_RXMODE="AT+POLL\r\n";
+//static char* BLE_RXMODE="AT+PUSH\r\n";
 static char* BLE_SCAN_START="AT+START\r\n";
 static char* BLE_SCAN_STOP="AT+STOP\r\n";
 
@@ -218,7 +219,7 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
         case SM_ENTER: {
             // Send who command to ensure comm ok
             wskt_write(ctx->cnx, (uint8_t*)BLE_CHECK, strlen(BLE_CHECK));
-            sm_timer_start(ctx->mySMId, 500);
+            sm_timer_start(ctx->mySMId, 1000);      // allow 1s for response
             log_debug("BLE: check who");
             return SM_STATE_CURRENT;
         }
@@ -234,8 +235,13 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             }
             return MS_BLE_OFF;
         }
-        case ME_BLE_RET_OK: {
-//            log_debug("BLE: response");
+        case ME_BLE_RET_OK: {       // return is just OK or READY - really should wait for proper WHO response
+            log_debug("BLE: comm ok - rewho");
+            wskt_write(ctx->cnx, (uint8_t*)BLE_CHECK, strlen(BLE_CHECK));
+            return SM_STATE_CURRENT;
+        }
+        case ME_BLE_RET_INT: {        // return is an integer which is what we expect from WHO
+            log_debug("BLE: who=%d", (uint32_t)data);
             // Normally the who response is the data value. Store it for later
             ctx->cardType = (uint32_t)data;
             // if cb call it
@@ -372,8 +378,8 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
     switch(e) {
         case SM_ENTER: {
             resetIBList();      // throw away old list
-            // poll mode
-            wskt_write(ctx->cnx, (uint8_t*)BLE_POLL, strlen(BLE_POLL));
+            // rx data mode
+            wskt_write(ctx->cnx, (uint8_t*)BLE_RXMODE, strlen(BLE_RXMODE));
             // And start the scanning
             if (ctx->uuid!=NULL) {
                 // TODO start srting is ",UUID"
@@ -381,7 +387,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             } else {
                 wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_START, strlen(BLE_SCAN_START));
             }
-            // poll every second
+            // remind every second
             sm_timer_start(ctx->mySMId, 1000);
             log_info("BLE:scanning[%d->%d]", ctx->majorStart, ctx->majorEnd);
             return SM_STATE_CURRENT;
@@ -393,7 +399,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
-            wskt_write(ctx->cnx, (uint8_t*)BLE_POLL, strlen(BLE_POLL));
+            wskt_write(ctx->cnx, (uint8_t*)BLE_RXMODE, strlen(BLE_RXMODE));
             // Every second, poll for ibeacon data
             sm_timer_start(ctx->mySMId, 1000);
             return SM_STATE_CURRENT;
@@ -434,6 +440,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             if (ctx->cbfn!=NULL) {
                 (*ctx->cbfn)(WBLE_SCAN_RX_IB, ib);
             }
+            log_debug(".");
             return SM_STATE_CURRENT;
         }
         default: {
@@ -755,12 +762,19 @@ static void wble_mgr_rxcb(struct os_event* ev) {
         sm_sendEvent(_ctx.mySMId, ME_BLE_RET_OK, NULL);
     } else if (strncasecmp(line, "ERROR", 5)==0) {
        sm_sendEvent(_ctx.mySMId, ME_BLE_RET_ERR, NULL);
+    } else if (strncasecmp(line, "READY", 5)==0) {
+        sm_sendEvent(_ctx.mySMId, ME_BLE_RET_OK, NULL);
     } else if (strlen(line)<15) {
-        // Any none OK/ERROR/ble info line is considered as OK
-        uint32_t val = atoi(line);
-//        sm_sendEvent(_ctx.mySMId, ME_BLE_RET_INT, (void*)val);
-        log_debug("BLE:[%s]", line);
-        sm_sendEvent(_ctx.mySMId, ME_BLE_RET_OK, (void*)val);
+        int val = -1;
+        if (sscanf(line, "%d", &val)<0) {
+            // Any none OK/ERROR/ble info line is considered as OK
+//            log_debug("BLE:[%s]", line);
+            sm_sendEvent(_ctx.mySMId, ME_BLE_RET_OK, NULL);
+        } else  {
+            // Got a decimal value
+//            log_debug("BLE:[%s]=%d", line, val);
+            sm_sendEvent(_ctx.mySMId, ME_BLE_RET_INT, (void*)val);
+        }
     } else {
         // Parse it as ibeacon data
         ibeacon_data_t ib;
@@ -781,6 +795,7 @@ static void wble_mgr_rxcb(struct os_event* ev) {
                 }
             } else {
                 _ctx.nbRxBadMajor++;
+                log_debug("?");
 //                log_debug("BLE:saw ib %4x,%4x but outside major filter range",ib.major, ib.minor);
             }
         }
