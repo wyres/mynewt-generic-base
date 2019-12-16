@@ -23,9 +23,8 @@
 #include "wyres-generic/minmea.h"
 #include "wyres-generic/sm_exec.h"
 
-// When debugging gps issues enable the define below
-#define DEBUG_GPS 1
-
+// Enable/disable detailed debug log stuff
+//#define DEBUG_GPS 1
 
 //#define GPS_UART    MYNEWT_VAL(GPS_UART)
 //#define GPS_TASK_PRIO       MYNEWT_VAL(GPS_TASK_PRIO)

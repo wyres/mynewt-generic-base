@@ -21,6 +21,9 @@
 #include "wyres-generic/uartselector.h"
 #include "wyres-generic/sm_exec.h"
 
+// Enable/disable detailed debug log stuff
+//#define DEBUG_BLE 1
+
 #define WBLE_UART    MYNEWT_VAL(WBLE_UART)
 //#define WBLE_TASK_PRIO       MYNEWT_VAL(WBLE_TASK_PRIO)
 //#define WBLE_TASK_STACK_SZ   OS_STACK_ALIGN(256)
@@ -36,6 +39,7 @@ static char* BLE_SCAN_STOP="AT+STOP\r\n";
 
 static char* BLE_TYPE_SCANNER="AT+TYPE=0\r\n";
 static char* BLE_TYPE_IBEACON="AT+TYPE=2\r\n";
+// Type value returned from AT+WHO. Don't ask why the 'set' id is different from the 'who' id...
 #define TYPE_SCANNER    (1)
 #define TYPE_IBEACON    (3)
 
@@ -241,7 +245,9 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case ME_BLE_RET_INT: {        // return is an integer which is what we expect from WHO
+#ifdef DEBUG_BLE
             log_debug("BLE: who=%d", (uint32_t)data);
+#endif
             // Normally the who response is the data value. Store it for later
             ctx->cardType = (uint32_t)data;
             // if cb call it
@@ -440,7 +446,9 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             if (ctx->cbfn!=NULL) {
                 (*ctx->cbfn)(WBLE_SCAN_RX_IB, ib);
             }
+#ifdef DEBUG_BLE
             log_debug(".");
+#endif
             return SM_STATE_CURRENT;
         }
         default: {
@@ -768,11 +776,15 @@ static void wble_mgr_rxcb(struct os_event* ev) {
         int val = -1;
         if (sscanf(line, "%d", &val)<0) {
             // Any none OK/ERROR/ble info line is considered as OK
-//            log_debug("BLE:[%s]", line);
+#ifdef DEBUG_BLE
+            log_debug("BLE:[%s]", line);
+#endif
             sm_sendEvent(_ctx.mySMId, ME_BLE_RET_OK, NULL);
         } else  {
             // Got a decimal value
-//            log_debug("BLE:[%s]=%d", line, val);
+#ifdef DEBUG_BLE
+            log_debug("BLE:[%s]=%d", line, val);
+#endif
             sm_sendEvent(_ctx.mySMId, ME_BLE_RET_INT, (void*)val);
         }
     } else {
@@ -781,7 +793,9 @@ static void wble_mgr_rxcb(struct os_event* ev) {
         uint32_t uuid;      // we don't care at this point
         // <MMMM>,<mmmm>,<RR>,<EX>,<UUUU>
         if (sscanf(line, "%4x,%4x,%2x,%2x,%4x", (int*)&ib.major, (int*)&ib.minor, (int*)&ib.extra, (int*)&ib.rssi, (int*)&uuid)<0) {
-            log_debug("BLE:bad parse");
+#ifdef DEBUG_BLE
+            log_debug("BLE:bad parse [%s]", line);
+#endif
         } else {
             // Is major vale between majorStart and majorEnd filters?
             if (ib.major>=_ctx.majorStart && ib.major<=_ctx.majorEnd) {
@@ -791,11 +805,13 @@ static void wble_mgr_rxcb(struct os_event* ev) {
                     // Tell SM
                     sm_sendEvent(_ctx.mySMId, ME_BLE_UPDATE, (void*)idx);
                 } else {
-                    log_debug("BLE:saw %4x,%4x list full",ib.major, ib.minor);
+                    log_warn("BLE:saw %4x,%4x list full",ib.major, ib.minor);
                 }
             } else {
                 _ctx.nbRxBadMajor++;
+#ifdef DEBUG_BLE
                 log_debug("?");
+#endif
 //                log_debug("BLE:saw ib %4x,%4x but outside major filter range",ib.major, ib.minor);
             }
         }
