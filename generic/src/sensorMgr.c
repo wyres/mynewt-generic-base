@@ -217,6 +217,7 @@ uint32_t SRMgr_getLastButtonReleaseTS()
 }
 bool SRMgr_hasTempChanged() 
 {
+    readEnv();      // ensure uptodate
     return (delta(_ctx.currTempdC, _ctx.lastTempdC)>2);
 }
 int16_t SRMgr_getTempdC() 
@@ -226,6 +227,7 @@ int16_t SRMgr_getTempdC()
 }
 bool SRMgr_hasPressureChanged() 
 {
+    readEnv();      // ensure uptodate
     return (delta(_ctx.currPressurePa, _ctx.lastPressurePa)>10);
 }
 int32_t SRMgr_getPressurePa() 
@@ -235,6 +237,7 @@ int32_t SRMgr_getPressurePa()
 }
 bool SRMgr_hasBattChanged() 
 {
+    readEnv();      // ensure uptodate
     return (delta(_ctx.currBattmV, _ctx.lastBattmV)>50);
 }
 uint16_t SRMgr_getBatterymV() 
@@ -244,6 +247,7 @@ uint16_t SRMgr_getBatterymV()
 }
 bool SRMgr_hasLightChanged() 
 {
+    readEnv();      // ensure uptodate
     return (delta(_ctx.currLight, _ctx.lastLight)>2);
 }
 uint8_t SRMgr_getLight() 
@@ -253,19 +257,23 @@ uint8_t SRMgr_getLight()
 }
 uint32_t SRMgr_getLastNoiseTime() 
 {
+    readEnv();      // ensure uptodate
     return _ctx.lastNoiseTS;
 }
 uint8_t SRMgr_getNoiseFreqkHz() 
 {
+    readEnv();      // ensure uptodate
     return _ctx.noiseFreqkHz;
 }
 uint8_t SRMgr_getNoiseLeveldB() 
 {
+    readEnv();      // ensure uptodate
     return _ctx.noiseLeveldB;
 }
 
 bool SRMgr_hasADC1Changed() 
 {
+    readEnv();      // ensure uptodate
     return (delta(_ctx.currADC1mV, _ctx.lastADC1mV)>50);
 }
 uint16_t SRMgr_getADC1mV() 
@@ -275,6 +283,7 @@ uint16_t SRMgr_getADC1mV()
 }
 bool SRMgr_hasADC2Changed() 
 {
+    readEnv();      // ensure uptodate
     return (delta(_ctx.currADC2mV, _ctx.lastADC2mV)>50);
 }
 uint16_t SRMgr_getADC2mV() 
@@ -444,7 +453,7 @@ static void readEnv()
             if (_ctx.currBattmV > 0) {
                 _ctx.currBattmV = ref_voltage / ( uint32_t )_ctx.currBattmV;
             }
-            log_debug("S bat %d", _ctx.currBattmV);
+//            log_debug("S bat %d", _ctx.currBattmV);
         }
         if (LIGHT_SENSOR>=0) 
         {
@@ -464,7 +473,7 @@ static void readEnv()
                 formatedLightLevel = ((rawLightLevel * 0xFF) / LIGHT_MAX);
             }
             _ctx.currLight = (uint8_t)formatedLightLevel;
-            log_debug("S lum %d", _ctx.currLight);
+//            log_debug("S lum %d", _ctx.currLight);
         }
         if (GPIO_ADC1>=0) 
         {

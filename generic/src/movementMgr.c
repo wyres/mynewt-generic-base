@@ -237,17 +237,19 @@ uint32_t MMMgr_getLastOrientTime()
 MM_ORIENT MMMgr_getOrientation() 
 {
     // evaluate x/y/z to determine this
-    if (_ctx.x>0 && _ctx.x>_ctx.y && _ctx.x>_ctx.z) {
-        return UPRIGHT;
+    if (abs(_ctx.y)>abs(_ctx.x) && abs(_ctx.y)>abs(_ctx.z)) {
+        if (_ctx.y>0) {
+            return UPRIGHT;
+        } else {
+            return INVERTED;
+        }
     }
-    if (_ctx.x<0 && _ctx.x<_ctx.y && _ctx.x<_ctx.z) {
-        return INVERTED;
-    }
-    if (_ctx.y>0 && _ctx.y>_ctx.x && _ctx.y>_ctx.z) {
-        return FLAT_FACE;
-    }
-    if (_ctx.y<0 && _ctx.y<_ctx.x && _ctx.y<_ctx.z) {
-        return FLAT_BACK;
+    if (abs(_ctx.z)>abs(_ctx.x) && abs(_ctx.z)>abs(_ctx.y)) {
+        if (_ctx.z>0) {
+            return FLAT_FACE;
+        } else {
+            return FLAT_BACK;
+        }
     }
     return UNKNOWN;
 }

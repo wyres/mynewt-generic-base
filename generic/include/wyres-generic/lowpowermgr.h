@@ -29,7 +29,6 @@ extern "C" {
 typedef enum  { LP_RUN, LP_DOZE, LP_SLEEP, LP_DEEPSLEEP, LP_OFF } LP_MODE_t;
 typedef uint8_t LP_ID_t;
 typedef void (*LP_CBFN_t)(LP_MODE_t prevmode, LP_MODE_t newmode);
-typedef int (*LP_HOOK_t)();
 
 // Register as a low power actor, to be able to set desired power mode, and to be told when entering or leaving sleep
 LP_ID_t  LPMgr_register(LP_CBFN_t cb);
@@ -38,6 +37,7 @@ LP_ID_t  LPMgr_register(LP_CBFN_t cb);
 // TODO should there be a way to FORCE a lp mode (override other users of LPM?)
 void LPMgr_setLPMode(LP_ID_t id, LP_MODE_t m);
 // if OS wraps the enter/exit of sleep mode
+int LPMgr_getMode();
 int LPMgr_entersleep();
 int LPMgr_exitsleep();
 
