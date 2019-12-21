@@ -364,15 +364,14 @@ static void uart_tx_ready(void* ctx) {
     circ_bbuf_push(&(myCfg->txBuff), c);
 }
 */
-// LOw power mode change - disable UART device(s) in deep low power
+// LOw power mode change - disable UART device(s) in deep low power: DO NOT LOG OR TAKE TOO MUCH STACK
 static void lp_change(LP_MODE_t oldmode, LP_MODE_t newmode) {
     if (newmode>=LP_DEEPSLEEP) {
-        log_debug("UM:off");
         // need to call all devices we know about to deinit their hw
         for (int i=0;i<_nbUARTCfgs;i++) {
             if (!_cfgs[i].isSuspended) {
                 _cfgs[i].isSuspended = true;
-                log_debug("UM:suspend %s", _cfgs[i].dname);
+                log_noout("UM:suspend %s", _cfgs[i].dname);
                 // we check if already de-inited as may not be robust on double suspend...
     //            os_dev_suspend(_cfgs[i].dname, 0, 1);
             }
@@ -384,9 +383,8 @@ static void lp_change(LP_MODE_t oldmode, LP_MODE_t newmode) {
             if (_cfgs[i].isSuspended) {
                 _cfgs[i].isSuspended = false;
 //              os_dev_resume(_cfgs[i].dname, 0, 1);
-                log_debug("UM:resume %s", _cfgs[i].dname);   // log after resume...
+                log_noout("UM:resume %s", _cfgs[i].dname);   // log after resume...
             }
         }
-        log_debug("UM:uart on");
     }
 }

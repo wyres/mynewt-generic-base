@@ -51,14 +51,14 @@ static struct {
     LP_ID_t lpUserId;
 } _ctx;
 
-// low power state change callback
+// low power state change callback : DO NOT LOG OR TAKE TOO MUCH STACK
 void lp_change(LP_MODE_t prev, LP_MODE_t new) 
 {
     if (new>=LP_DEEPSLEEP)
     {
         if (ACC_sleep() != ACC_SUCCESS)
         {
-            log_warn("Accelero failed to go to sleep");
+            log_noout("Accelero failed to go to sleep");
         }
         // deinit I2C in BSP?
         // TODO
@@ -68,7 +68,7 @@ void lp_change(LP_MODE_t prev, LP_MODE_t new)
         // init I2C in BSP?
         if (ACC_activate() != ACC_SUCCESS)
         {
-            log_warn("Accelero failed to activate");
+            log_noout("Accelero failed to activate");
         }
     }
 }
@@ -111,12 +111,13 @@ void movement_init(void)
     // check accelero sensor exists and configure it
     if (ACC_init() != ACC_SUCCESS) 
     {
-        log_error("accelero hw init fails");
+        // Can't log in sysinit called fns
+        log_noout("accelero hw init fails");
         assert(0);
     }
     if (ACC_setDetectionMode(detectionMode, threshold, duration) != ACC_SUCCESS)
     {
-        log_error("accelero detection configuration fails");
+        log_noout("accelero detection configuration fails");
         assert(0);
     }
 

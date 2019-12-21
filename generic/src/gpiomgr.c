@@ -324,9 +324,8 @@ static void deinit_hal(GPIO_t* p) {
     }
 }
 
-// Callback from LP manager
+// Callback from LP manager : DO NOT LOG OR TAKE TOO MUCH STACK
 static void onLPModeChange(LP_MODE_t current, LP_MODE_t next) {
-    log_debug("GM:LPM check");
     os_mutex_pend(&_gpiomutex, OS_TIMEOUT_NEVER);
     for(int i=0;i<MAX_GPIOS;i++) {
         if (_gpios[i].pin>=0) {
