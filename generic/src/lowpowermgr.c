@@ -36,7 +36,6 @@ static struct lp_ctx {
     .sleepMode=LP_SLEEP,
 };
 static LP_MODE_t calcNextSleepMode();
-void os_hook_sleep(LP_HOOK_t enter, LP_HOOK_t exit);
 
 // Initialise low power manager
 void LPMgr_init(void) {
