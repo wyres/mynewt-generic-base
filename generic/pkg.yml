@@ -27,7 +27,6 @@ pkg.keywords:
 pkg.deps:
     - "@apache-mynewt-core/kernel/os"
     - "@apache-mynewt-core/hw/hal"
-    - "@wyres-gitlab-mynewt-bsp/w_base"
 
 pkg.deps.LOG_UART_ENABLED:
     - "@apache-mynewt-core/hw/drivers/uart/uart_bitbang"
