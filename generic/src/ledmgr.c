@@ -267,18 +267,15 @@ static int findLEDRef(int8_t gpio_pin) {
     }
     return -1;
 }
-// LOw power mode change
+// LOw power mode change : DO NOT LOG OR TAKE TOO MUCH STACK
 static void lp_change(LP_MODE_t oldmode, LP_MODE_t newmode) {
     if (newmode>=LP_DEEPSLEEP) {
-        log_debug("LM:deepsleep");
         // stop any running LEDs
         for(int r=0;r<_ledRefsSz;r++) {
             _leds[r].active=false;
             // Ensure no timer running
             stopLEDTimer(r);
         }
-    } else {
-        log_debug("LM:leds allowed");
     }
 }
 

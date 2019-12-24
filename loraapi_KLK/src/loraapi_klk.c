@@ -655,17 +655,15 @@ static void execRxRadio(struct os_event* e) {
     log_warn("LW:DRRX TBI");
 }
 
-// Callback from low power manager about change of mode
+// Callback from low power manager about change of mode - NO LOGS
 static void lp_change(LP_MODE_t prevmode, LP_MODE_t newmode) {
     // Radio is ON in all modes except DEEPSLEEP
     if (prevmode>=LP_DEEPSLEEP && newmode <LP_DEEPSLEEP) {
         // wake up radio - init its periphs
-        log_debug("LW:wakeup");
         // TODO find KLK api to do this?
         // lorawan_init();         // in board_utils.c
     } else if (prevmode<LP_DEEPSLEEP && newmode >= LP_DEEPSLEEP) {
         // shutdown radio - reset its periphs, deinit spi etc
-        log_debug("LW:sleep");
         // TODO
         // lorawan_deinit();         // not yet in board_utils.c
     }

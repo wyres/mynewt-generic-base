@@ -120,6 +120,98 @@ bool CFMgr_getOrAddElement(uint16_t key, void* data, uint8_t len) {
     hal_bsp_nvmLock();
     return ret;
 }
+
+// Helper getOrAdd methods for specific int types that check the range
+bool CFMgr_getOrAddElementCheckRangeUINT32(uint16_t key, uint32_t* data, uint32_t min, uint32_t max) {
+    // get the value
+    uint32_t cv = 0;
+    int len = CFMgr_getElement(key, &cv, sizeof(uint32_t));
+    if (len==-1) {
+        // create with given default (which we will assume is valid...)
+        CFMgr_getOrAddElement(key, data, sizeof(uint32_t));
+        return true;
+    }
+    if (len!=sizeof(uint32_t)) {
+        return false;       // this should not happen
+    }
+    // Check configured value is ok
+    if (cv>=min && cv<=max) {
+        // ok value, return it
+        *data = cv;
+        return true;
+    }
+    // Overwrite the bad value with default to ensure ok from now
+    CFMgr_setElement(key, data, sizeof(uint32_t));
+    return false;       // it was bad...
+}
+
+bool CFMgr_getOrAddElementCheckRangeUINT8(uint16_t key, uint8_t* data, uint8_t min, uint8_t max) {
+    // get the value
+    uint8_t cv = 0;
+    int len = CFMgr_getElement(key, &cv, sizeof(uint8_t));
+    if (len==-1) {
+        // create with given default (which we will assume is valid...)
+        CFMgr_getOrAddElement(key, data, sizeof(uint8_t));
+        return true;
+    }
+    if (len!=sizeof(uint8_t)) {
+        return false;       // this should not happen
+    }
+    // Check configured value is ok
+    if (cv>=min && cv<=max) {
+        // ok value, return it
+        *data = cv;
+        return true;
+    }
+    // Overwrite the bad value with default?
+    CFMgr_setElement(key, data, sizeof(uint8_t));
+    return false;       // it was bad...
+}
+bool CFMgr_getOrAddElementCheckRangeINT32(uint16_t key, int32_t* data, int32_t min, int32_t max) {
+    // get the value
+    int32_t cv = 0;
+    int len = CFMgr_getElement(key, &cv, sizeof(int32_t));
+    if (len==-1) {
+        // create with given default (which we will assume is valid...)
+        CFMgr_getOrAddElement(key, data, sizeof(int32_t));
+        return true;
+    }
+    if (len!=sizeof(int32_t)) {
+        return false;       // this should not happen
+    }
+    // Check configured value is ok
+    if (cv>=min && cv<=max) {
+        // ok value, return it
+        *data = cv;
+        return true;
+    }
+    // Overwrite the bad value with default?
+    CFMgr_setElement(key, data, sizeof(int32_t));
+    return false;       // it was bad...
+}
+bool CFMgr_getOrAddElementCheckRangeINT8(uint16_t key, int8_t* data, int8_t min, int8_t max) {
+        // get the value
+    int8_t cv = 0;
+    int len = CFMgr_getElement(key, &cv, sizeof(int8_t));
+    if (len==-1) {
+        // create with given default (which we will assume is valid...)
+        CFMgr_getOrAddElement(key, data, sizeof(int8_t));
+        return true;
+    }
+    if (len!=sizeof(int8_t)) {
+        return false;       // this should not happen
+    }
+    // Check configured value is ok
+    if (cv>=min && cv<=max) {
+        // ok value, return it
+        *data = cv;
+        return true;
+    }
+    // Overwrite the bad value with default?
+    CFMgr_setElement(key, data, sizeof(int8_t));
+    return false;       // it was bad...
+}
+
 // get a config value into the data buffer, of size maxlen.
 // Returns the actual length of the element returned, or -1 if the key does not exist
 int CFMgr_getElement(uint16_t key, void* data, uint8_t maxlen) {

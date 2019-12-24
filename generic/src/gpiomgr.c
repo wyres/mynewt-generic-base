@@ -114,7 +114,7 @@ void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offm
         p->lpEnabled = true;        // assume pin is alive in current lp mode!
         p->adc_chan = adc_chan;
         init_hal(p);
-        p->value = hal_bsp_adc_readmV(adc_chan);
+        p->value = hal_bsp_adc_read(adc_chan);
     }
     return p;
 
@@ -189,13 +189,13 @@ int GPIO_read(int8_t pin) {
     return p->value;
 }
 // Note pin maps to a ADC channel which may or may not map to an external pin
-int GPIO_readADCmV(int8_t pin) {
+int GPIO_readADC(int8_t pin) {
     GPIO_t* p = findGPIO(pin);
     assert(p!=NULL);
     // It is allowed to read an output pin...
     if (p->lpEnabled) {
         // Read value. Note we don't use the pin, but the adc channel
-        p->value =hal_bsp_adc_readmV(p->adc_chan);
+        p->value =hal_bsp_adc_read(p->adc_chan);
     }
     return p->value;
 }
@@ -324,9 +324,8 @@ static void deinit_hal(GPIO_t* p) {
     }
 }
 
-// Callback from LP manager
+// Callback from LP manager : DO NOT LOG OR TAKE TOO MUCH STACK
 static void onLPModeChange(LP_MODE_t current, LP_MODE_t next) {
-    log_debug("GM:LPM check");
     os_mutex_pend(&_gpiomutex, OS_TIMEOUT_NEVER);
     for(int i=0;i<MAX_GPIOS;i++) {
         if (_gpios[i].pin>=0) {

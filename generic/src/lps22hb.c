@@ -22,6 +22,8 @@
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/ALTI_basic.h"
 
+/* Only include this implementation of the altimeter api if the bsp says we have one of these */
+#ifdef ALTI_LPS22HB
 //****************************************************************//
 //********************FUNCTIONS PROTOTYPES************************//
 //**********************STRUCTS & ENUMS***************************//
@@ -2965,3 +2967,4 @@ ALTI_Error_t ALTI_readTemperature(int16_t *temperature)
     }
     return ALTI_SUCCESS;
 }
+#endif /* ALTI_LPS22HB */

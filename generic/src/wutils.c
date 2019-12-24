@@ -331,3 +331,28 @@ void Util_writeLE_int16_t(uint8_t* b, uint8_t offset, int16_t v) {
     b[offset] = (uint8_t)(v & 0xFF);
     b[offset+1] = (uint8_t)((v & 0xFF00) >> 8);
 }
+
+/*
+ * helper to read 32 bit LE from buffer (may be 0 stripped)
+ */
+uint32_t Util_readLE_uint32_t(uint8_t* b, uint8_t l) {
+    uint32_t ret = 0;
+    for(int i=0;i<4;i++) {
+        if (b!=NULL && i<l) {
+            ret += (b[i] << 8*i);
+        } // else 0
+    }
+    return ret;
+}
+/*
+ * helper to read 16 bit LE from buffer (may be 0 stripped)
+ */
+uint16_t Util_readLE_uint16_t(uint8_t* b, uint8_t l) {
+    uint16_t ret = 0;
+    for(int i=0;i<2;i++) {
+        if (b!=NULL && i<l) {
+            ret += (b[i] << 8*i);
+        } // else 0
+    }
+    return ret;
+}
