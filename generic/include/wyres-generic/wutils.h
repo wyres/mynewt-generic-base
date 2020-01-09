@@ -72,7 +72,10 @@ void wassert_fn(const char* file, int lnum);
 // logging
 void log_init_console(bool enable);
 void log_init_dbg(uint8_t u);
-int log_init_uart(const char* dev, uint32_t baud, int8_t uartSelect);
+void log_config_uart(const char* dev, uint32_t baud, int8_t uartSelect);
+int log_init_uart();
+void log_deinit_uart();
+bool log_check_uart_active();
 void log_debug_fn(const char* sl, ...);
 void log_info_fn(const char* sl, ...);
 void log_warn_fn(const char* sl, ...);

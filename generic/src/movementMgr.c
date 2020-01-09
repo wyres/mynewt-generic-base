@@ -51,28 +51,6 @@ static struct {
     LP_ID_t lpUserId;
 } _ctx;
 
-// low power state change callback : DO NOT LOG OR TAKE TOO MUCH STACK
-void lp_change(LP_MODE_t prev, LP_MODE_t new) 
-{
-    if (new>=LP_DEEPSLEEP)
-    {
-        if (ACC_sleep() != ACC_SUCCESS)
-        {
-            log_noout("Accelero failed to go to sleep");
-        }
-        // deinit I2C in BSP?
-        // TODO
-    } 
-    else 
-    {
-        // init I2C in BSP?
-        if (ACC_activate() != ACC_SUCCESS)
-        {
-            log_noout("Accelero failed to activate");
-        }
-    }
-}
-
 void movement_init(void) 
 {
     //Accelero config
@@ -121,10 +99,10 @@ void movement_init(void)
         assert(0);
     }
 
-    // start timer for checks? or register with a "callmeWhenAwakeANyway" service?
-
-    // register with LP mgr to get called on changes, to deinit/init the I2C
-    _ctx.lpUserId = LPMgr_register(lp_change);
+    // register with LP mgr to de able to say what LP mode we are ok with
+    _ctx.lpUserId = LPMgr_register(NULL);   // no need to tell me
+    // We are always ok with deepsleep during idle periods, as no long running actions on the device
+    LPMgr_setLPMode(_ctx.lpUserId, LP_DEEPSLEEP);
 }
 
 bool MMMgr_registerMovementCB(MM_CBFN_t cb) 

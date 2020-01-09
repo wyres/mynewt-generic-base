@@ -97,8 +97,11 @@ static char _noutbuf[MAX_LOGSZ];        // for nout log
 // By default use mynewt console, not some random uart
 static bool _useConsole = true;
 static int _uartNb = -1;
+// Uart device config
 static int8_t _uartSelect = -1;
 static wskt_t* _uartSkt = NULL;
+static const char* _uartDev = NULL;
+static uint32_t _uartBaud=19200;
 
 // note the doout is to allow to break here in debugger and see the log, without actually accessing UART
 static void do_log(char lev, const char* ls, va_list vl) {
@@ -127,17 +130,22 @@ static void do_log(char lev, const char* ls, va_list vl) {
             hal_uart_blocking_tx(_uartNb, _buf[i]);
         }
     }
-   if (_uartSkt!=NULL) {
-        // select it on uart switcher..
-        uart_select(_uartSelect);
+   if (_uartDev!=NULL) {
+        // Ensure its open (no effect if already open)
+        if (log_init_uart()==0) {
+            // select it on uart switcher..
+            uart_select(_uartSelect);
 
-        int res = wskt_write(_uartSkt, (uint8_t*)_buf, len);
-        if (res<0) {
-            _buf[0] = '*';
-            wskt_write(_uartSkt, (uint8_t*)_buf, 1);      // so user knows he missed something.
-            // Not actually a lot we can do about this especially if its a flow control (SKT_NOSPACE) condition - ignore it
-           log_noout_fn("log FAIL[%s]", _buf);      // just for debugger to watch
-       }
+            int res = wskt_write(_uartSkt, (uint8_t*)_buf, len);
+            if (res<0) {
+                _buf[0] = '*';
+                wskt_write(_uartSkt, (uint8_t*)_buf, 1);      // so user knows he missed something.
+                // Not actually a lot we can do about this especially if its a flow control (SKT_NOSPACE) condition - ignore it
+               log_noout_fn("log FAIL[%s]", _buf);      // just for debugger to watch
+            }        
+        } else {
+            log_noout_fn("log init FAIL[%s]", _buf);      // just for debugger to watch
+        }
    }
 }
 uint8_t get_log_level() {
@@ -170,36 +178,51 @@ void log_init_console(bool enable) {
 void log_init_dbg(uint8_t u) {
     _uartNb = u;
 }
-int log_init_uart(const char* dev, uint32_t baud, int8_t uartSelect) {
-    // allow re-init
-    if (_uartSkt!=NULL) {
-        wskt_close(&_uartSkt);
-    }
+/* configure uart device for logging */
+void log_config_uart(const char* dev, uint32_t baud, int8_t uartSelect) {
+    _uartDev = dev;
+    _uartBaud = baud;
     _uartSelect = uartSelect;
+}
+/* open/init UART for logging */
+int log_init_uart() {
+    // if already init, dont redo
+    if (_uartSkt!=NULL) {
+        return 0;       // ok 
+    }
     // open it and configure
-    _uartSkt = wskt_open(dev, NULL, NULL);
+    _uartSkt = wskt_open(_uartDev, NULL, NULL);
     if (_uartSkt==NULL) {
         return -1;
     }
     wskt_ioctl_t cmd = {
         .cmd = IOCTL_SET_BAUD,
-        .param = baud,
+        .param = _uartBaud,
     };
     return wskt_ioctl(_uartSkt, &cmd);
-    /*
-    // get uart device number from end of device name
-    _uartNb = '0'-dev[strlen(dev)-1];
-    int rc = hal_uart_config(_uartNb,
-        baud,
-        8,
-        1,
-        HAL_UART_PARITY_NONE,
-        HAL_UART_FLOW_CTL_NONE
-    );
-    return rc;
-    */
 }
-
+// close output uart for logs
+void log_deinit_uart() {
+    if (_uartSkt!=NULL) {
+        wskt_close(&_uartSkt);      // sets it to null
+    }
+}
+/* check if logging uart is active, and deinit() it if its not (for low powerness) */
+bool log_check_uart_active() {
+    if (_uartSkt!=NULL) {
+        wskt_ioctl_t cmd = {
+            .cmd = IOCTL_CHECKTX,
+            .param = 0,
+        };
+        if (wskt_ioctl(_uartSkt, &cmd)>0) {
+            return true;        // still got bytes to TX so still active
+        }
+        // close it
+        log_deinit_uart();
+        return false; // not active
+    }
+    return false;       // not open so not active
+}
 void log_debug_fn(const char* ls, ...) {
     if (_logLevel<=LOGS_DEBUG) {
         va_list vl;
@@ -290,8 +313,10 @@ void wlog_init(void) {
     // If specific device for logging, create its wskt driver driver
     res=uart_line_comm_create(MYNEWT_VAL(LOG_UART), MYNEWT_VAL(LOG_UART_BAUDRATE));
     assert(res);
-    // And tell logging to use it
-    log_init_uart(MYNEWT_VAL(LOG_UART), MYNEWT_VAL(LOG_UART_BAUDRATE), MYNEWT_VAL(LOG_UART_SELECT));  
+    // And tell logging to use it whenrequired
+    log_config_uart(MYNEWT_VAL(LOG_UART), MYNEWT_VAL(LOG_UART_BAUDRATE), MYNEWT_VAL(LOG_UART_SELECT));  
+    res=(log_init_uart()==0);    // kick it off
+    assert(res);
 #endif
 //    log_init_dbg(0);      // dont do blocking tx please
     assert(res);

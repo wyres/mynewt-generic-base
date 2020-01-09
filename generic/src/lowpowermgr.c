@@ -39,17 +39,6 @@ static LP_MODE_t calcNextSleepMode();
 
 // Initialise low power manager
 void LPMgr_init(void) {
-    // Hook OS enter/exit of WFI???
-// See https://medium.com/@ly.lee/low-power-nb-iot-on-stm32-blue-pill-with-apache-mynewt-and-embedded-rust-cef5a3ecdd90
-// need to override os_tick_init() and os_tick_idle() to use STM32 specific sleep mode and RTC (rather than tick timer)
-/*
-#  Linker flags: Rename all os_tick_init() and os_tick_idle() references to 
-#  __wrap_os_tick_init() and __wrap_os_tick_idle(), so that we can provide a custom implementation
-pkg.lflags:    
-    - -Wl,-wrap,os_tick_init     
-    - -Wl,-wrap,os_tick_idle
- */
-    // Then os_tick_init() should use MCU specific tick method (eg RTC in STM32) and method of going to sleep (including selection of a sleep type)
     // This is a generic low power manager. So it delegates this stuff to BSP/MCU code...
     hal_bsp_power_hooks(LPMgr_getMode, LPMgr_entersleep, LPMgr_exitsleep);
 }
@@ -76,7 +65,10 @@ LP_MODE_t LPMgr_getNextLPMode() {
     return _ctx.sleepMode;
 }
 
-// Hook functions round the 'idle' method. These allow the code to pause/resume external hw or other tasks.
+/* Hook functions round the 'idle' method. These allow the code to pause/resume external hw or other tasks.
+ * These functions are called with IRQs disabled, and with a minimal stack size (mynewt idle stack). 
+ * DO NOT LOG, OR SLEEP, OR DO TOO MUCH STUFF IN THEM OR BAD STUFF WILL HAPPEN
+ */
 
 /* getMode returns indication of level of sleep to use eg light sleep (1) or a deep sleep (2) or even a OFF mode (3)
  * These should be the HAL_BSP_POWER_XXX defines from hap_power.h. The value is passed to the MUC specific 'sleep' 

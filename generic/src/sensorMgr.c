@@ -24,6 +24,7 @@
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/gpiomgr.h"
 
+#include "wyres-generic/lowpowermgr.h"
 #include "wyres-generic/sensormgr.h"
 #include "wyres-generic/configmgr.h"
 #include "wyres-generic/ALTI_basic.h"
@@ -50,6 +51,7 @@
 
 // store values in between checks
 static struct {
+    LP_ID_t lpUserId;
     struct {
         SR_BUTTON_CBFN_t fn;
         void* ctx;
@@ -109,14 +111,19 @@ void SRMgr_init(void)
         // if ext button is enabled, its IRQ etc runs all the time even during deepsleep
         GPIO_define_irq("button", EXT_BUTTON, buttonCB, &_ctx, HAL_GPIO_TRIG_BOTH, HAL_GPIO_PULL_UP, LP_DEEPSLEEP);
     }
+    // Register for to set desired low power mode. No need for callback to change setup
+    _ctx.lpUserId = LPMgr_register(NULL);
+    // We are currently ok with deepsleep during idle as not "started"
+    LPMgr_setLPMode(_ctx.lpUserId, LP_DEEPSLEEP);
 
 }
 
 void SRMgr_start() 
 {
+    // While active sensing dont turn off periphs please
+    LPMgr_setLPMode(_ctx.lpUserId, LP_DOZE);
     // configure GPIOs / I2C for periphs
     config();
-    _ctx.isActive = true;    
     // read stuff into current values
     readEnv();
 }
@@ -125,9 +132,10 @@ void SRMgr_stop()
 {
     // read stuff into current values before stopping
     readEnv();
-    _ctx.isActive = false;    
     // deconfigure GPIOS/I2C
     deconfig();
+    // can go into deep sleep now as we have deconfigured the periphs
+    LPMgr_setLPMode(_ctx.lpUserId, LP_DEEPSLEEP);
 }
 
 bool SRMgr_registerButtonCB(SR_BUTTON_CBFN_t cb, void* c) 
@@ -401,35 +409,38 @@ static void buttonCheckDebounced(struct os_event* e)
 }
 static void config() 
 {
-    // config GPIOS
-    // Note the ADC ones will work but return 0 on read if ADC not enabled
-    if (LIGHT_SENSOR>=0) 
-    {
-        // Must activate GPIO that provides power to it
-        GPIO_define_out("micropower", SENSOR_PWR, 1, LP_DOZE);
-        GPIO_define_adc("light", LIGHT_SENSOR, LIGHT_SENSOR_ADCCHAN, LP_DOZE);
-//        log_debug("SM light");
+    if (!_ctx.isActive) {
+        _ctx.isActive = true;
+        // config GPIOS
+        // Note the ADC ones will work but return 0 on read if ADC not enabled
+        if (LIGHT_SENSOR>=0) 
+        {
+            // Must activate GPIO that provides power to it
+            GPIO_define_out("micropower", SENSOR_PWR, 1, LP_DOZE);
+            GPIO_define_adc("light", LIGHT_SENSOR, LIGHT_SENSOR_ADCCHAN, LP_DOZE);
+    //        log_debug("SM light");
+        }
+        if (GPIO_ADC1>=0) 
+        {
+            GPIO_define_adc("adc1", GPIO_ADC1, CHAN_ADC1, LP_DOZE);
+        }
+        if (GPIO_ADC2>=0) 
+        {
+            GPIO_define_adc("adc2", GPIO_ADC2, CHAN_ADC2, LP_DOZE);
+        }
+        if (BATTERY_GPIO>=0) 
+        {
+            GPIO_define_adc("battery", BATTERY_GPIO, BATTERY_ADCCHAN, LP_DOZE);
+    //        log_debug("SM:batt");
+        }
+        // config alti on i2c
+        if (ALTI_init() != ALTI_SUCCESS)
+        {
+            log_warn("SM:Alti_init fail");
+        }
+        // config noise detector on micro
+        // TODO
     }
-    if (GPIO_ADC1>=0) 
-    {
-        GPIO_define_adc("adc1", GPIO_ADC1, CHAN_ADC1, LP_DOZE);
-    }
-    if (GPIO_ADC2>=0) 
-    {
-        GPIO_define_adc("adc2", GPIO_ADC2, CHAN_ADC2, LP_DOZE);
-    }
-    if (BATTERY_GPIO>=0) 
-    {
-        GPIO_define_adc("battery", BATTERY_GPIO, BATTERY_ADCCHAN, LP_DOZE);
-//        log_debug("SM:batt");
-    }
-    // config alti on i2c
-    if (ALTI_init() != ALTI_SUCCESS)
-    {
-        log_warn("SM:Alti_init fail");
-    }
-    // config noise detector on micro
-    // TODO
 }
 
 
@@ -506,30 +517,34 @@ static void readEnv()
 
 static void deconfig() 
 {
-    // remove config GPIOS
-    if (LIGHT_SENSOR>=0) 
-    {
-        GPIO_release(LIGHT_SENSOR);
-        GPIO_release(SENSOR_PWR);
-    }
-    if (GPIO_ADC1>=0) 
-    {
-        GPIO_release(GPIO_ADC1);
-    }
-    if (GPIO_ADC2>=0) 
-    {
-        GPIO_release(GPIO_ADC2);
-    }
-    if (BATTERY_GPIO>=0) 
-    {
-        GPIO_release(BATTERY_GPIO);
-    }
-    // accelero power state controlled by MovementMgr, no need for us to tell him
+    if (_ctx.isActive) {
+        _ctx.isActive = false;
 
-    // deconfig alti on i2c
-    // TODO
-    // config noise detector on micro
-    // TODO
+        // remove config GPIOS
+        if (LIGHT_SENSOR>=0) 
+        {
+            GPIO_release(LIGHT_SENSOR);
+            GPIO_release(SENSOR_PWR);
+        }
+        if (GPIO_ADC1>=0) 
+        {
+            GPIO_release(GPIO_ADC1);
+        }
+        if (GPIO_ADC2>=0) 
+        {
+            GPIO_release(GPIO_ADC2);
+        }
+        if (BATTERY_GPIO>=0) 
+        {
+            GPIO_release(BATTERY_GPIO);
+        }
+        // accelero power state controlled by MovementMgr, no need for us to tell him
+
+        // deconfig alti on i2c
+        // TODO
+        // config noise detector on micro
+        // TODO
+    }
 }
 
 static uint32_t delta(int a, int b) 

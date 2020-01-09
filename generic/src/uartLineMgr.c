@@ -66,7 +66,7 @@ static int uart_line_close(wskt_t* skt);
 static int uart_rx_cb(void*, uint8_t c);
 //static void uart_tx_ready(void* ctx);
 static int uart_tx_cb(void* ctx);
-static void lp_change(LP_MODE_t p, LP_MODE_t n);
+//static void lp_change(LP_MODE_t p, LP_MODE_t n);
 
 static wskt_devicefns_t _myDevice = {
     .open = &uart_line_open,
@@ -84,8 +84,10 @@ static LP_ID_t _lpUserId;
 void uart_line_comm_init(void) {
     // TODO should we use mempools to handle per-device structures?
     os_mutex_init(&_lbMutex);
-        // listen for lowpower entry to deep sleep and vice versa - we deinit/init uarts when this happens
-    _lpUserId = LPMgr_register(lp_change);
+    // register with low power manager so we can set the level of sleep we can take.
+    // The operation is essentially : if a UART device socket is OPEN, we permit SLEEP, if all are closed, we allow DEEPSLEEP
+    // No action when idle sleep is entered however
+    _lpUserId = LPMgr_register(NULL);
 
 }
 
@@ -171,6 +173,8 @@ static int uart_line_open(wskt_t* skt) {
             return SKT_NODEV;
         }
         log_uartbdg("open uart ok");
+        // A UART is active, don't go deep sleeping please
+        LPMgr_setLPMode(_lpUserId, LP_DOZE);
     }
     // Not much to do, UART io already running
     return SKT_NOERR;
@@ -244,12 +248,12 @@ static int uart_line_write(wskt_t* skt, uint8_t* data, uint32_t sz) {
         // if not, don't take any
         return SKT_NOSPACE;
     }
-    // Mutex protect
+    // IRQ disable TODO
     // copy it in
     for(int i=0; i<sz; i++) {
         circ_bbuf_push(buf, data[i]);
     }
-    // mutex release
+    // IRQ enable
 
     // Tell uart more tx data
     if (cfg->uartDev!=NULL) {
@@ -267,7 +271,18 @@ static int uart_line_close(wskt_t* skt) {
             os_dev_close(cfg->uartDev);
             cfg->uartDev = NULL;
         }
-        log_uartbdg("closed last socket on uart %s", cfg->dname);
+        // Dont do logging in here (as will re-open the debug uart potentially, and stop deep sleeping!!!)
+        log_noout("closed last socket on uart %s", cfg->dname);
+        // Check if ALL sockets on ALL devices are closed, in which case we allow DEEP SLEEP
+        bool allClosed = true;
+        for (int i=0;i<_nbUARTCfgs; i++) {
+            if (_cfgs[i].uartDev!=NULL) {
+                allClosed = false;
+            }
+        }
+        if (allClosed) {
+            LPMgr_setLPMode(_lpUserId, LP_DEEPSLEEP);
+        }
     }
     // leave any buffers to be tx'd in their own time
     return SKT_NOERR; 
@@ -364,6 +379,7 @@ static void uart_tx_ready(void* ctx) {
     circ_bbuf_push(&(myCfg->txBuff), c);
 }
 */
+/* uart deals with LP by blocking DEEPSLEEP unless all uarts are closed
 // LOw power mode change - disable UART device(s) in deep low power: DO NOT LOG OR TAKE TOO MUCH STACK
 static void lp_change(LP_MODE_t oldmode, LP_MODE_t newmode) {
     if (newmode>=LP_DEEPSLEEP) {
@@ -388,3 +404,4 @@ static void lp_change(LP_MODE_t oldmode, LP_MODE_t newmode) {
         }
     }
 }
+*/
