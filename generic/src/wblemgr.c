@@ -32,14 +32,16 @@
 static char* BLE_CHECK="AT+WHO\r\n";
 //static char* BLE_CONFIG="AT+CONFIG,00B4,00B4,0000,1,1\r\n";
 // Rx mode : poll (1 shot give me the list) or push (send each id as and when received)
-static char* BLE_RXMODE="AT+POLL\r\n";
-//static char* BLE_RXMODE="AT+PUSH\r\n";
+//static char* BLE_RXMODE="AT+POLL\r\n";
+// Latest version of BLE scanner using push mode works best for large numbers of BLE devices scanned...
+static char* BLE_RXMODE="AT+PUSH\r\n";
 static char* BLE_SCAN_START="AT+START\r\n";
 static char* BLE_SCAN_STOP="AT+STOP\r\n";
 
-static char* BLE_TYPE_SCANNER="AT+TYPE=0\r\n";
-static char* BLE_TYPE_IBEACON="AT+TYPE=2\r\n";
+static char* BLE_TYPE_SCANNER="AT+TYPE=1\r\n";  
+static char* BLE_TYPE_IBEACON="AT+TYPE=3\r\n";
 // Type value returned from AT+WHO. Don't ask why the 'set' id is different from the 'who' id...
+// NOTE: Ids aligned as of version 6 of BLE scannner code
 #define TYPE_SCANNER    (1)
 #define TYPE_IBEACON    (3)
 
