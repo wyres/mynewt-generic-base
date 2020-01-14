@@ -106,20 +106,21 @@ static uint32_t _uartBaud=19200;
 // note the doout is to allow to break here in debugger and see the log, without actually accessing UART
 static void do_log(char lev, const char* ls, va_list vl) {
     // protect here with a mutex?
-    _buf[0]=lev;
-    _buf[1]=':';
-    // need timestamp
-    vsprintf(_buf+2, ls, vl);
+    // level and timestamp
+    uint32_t now = TMMgr_getRelTimeMS();
+    sprintf(_buf, "%c%03d.%1d:", lev, (int)((now/1000)%1000), (int)((now/100)%10));
+    // add log
+    vsprintf(_buf+7, ls, vl);
+    // add CRLF to end, checking we didn't go off end
     int len = strnlen(_buf, MAX_LOGSZ);
     if ((len+3)>=MAX_LOGSZ) {
-        // oops might just have broken stuff...
-        _buf[MAX_LOGSZ-1] = '\0';
-    } else {
-        _buf[len]='\n';
-        _buf[len+1]='\r';
-        _buf[len+2]='\0';
-        len+=3;
+        // oops might just have broken stuff... this is why _nooutbuf is just after _buf... gives some margin
+        len=MAX_LOGSZ-3;
     }
+    _buf[len]='\n';
+    _buf[len+1]='\r';
+    _buf[len+2]='\0';
+    len+=3;
     // send to mynewt logger if enabled
     if (_useConsole) {
         console_write(_buf, len);
