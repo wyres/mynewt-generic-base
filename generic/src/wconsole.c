@@ -30,7 +30,7 @@
 static struct appctx {
     struct os_event myUARTEvent;
     SM_ID_t mySMId;
-    uint32_t lastInputTS;
+    uint32_t lastInputTS;       // secs since boot
     uint32_t idleTimeoutS;
     const char* uartDevice;
     int8_t uartSelect;
@@ -151,7 +151,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
         case ME_NEW_DATA: {
             log_debug("CN: comm ok");
             wskt_write(ctx->cnx, (uint8_t*)PROMPT, strlen(PROMPT));            
-            ctx->lastInputTS = TMMgr_getTime();
+            ctx->lastInputTS = TMMgr_getRelTimeSecs();
             return MS_ACTIVE;
         }
 
@@ -186,7 +186,7 @@ static SM_STATE_ID_t State_Active(void* arg, int e, void* data) {
         case SM_TIMEOUT: {
             if (ctx->idleTimeoutS>0) {
                 // Every X we check if had an input in the last 60s, if not then exit at mode
-                if ((TMMgr_getTime() - ctx->lastInputTS) > (ctx->idleTimeoutS*1000)) {
+                if ((TMMgr_getRelTimeSecs() - ctx->lastInputTS) > (ctx->idleTimeoutS)) {
                     return MS_STOPPING_COMM;
                 }
                 // set for next check
@@ -201,7 +201,7 @@ static SM_STATE_ID_t State_Active(void* arg, int e, void* data) {
         }
         case ME_NEW_DATA: {
             wskt_write(ctx->cnx, (uint8_t*)PROMPT, strlen(PROMPT));
-            ctx->lastInputTS = TMMgr_getTime();
+            ctx->lastInputTS = TMMgr_getRelTimeSecs();
             return SM_STATE_CURRENT;
         }
 
@@ -295,7 +295,7 @@ bool wconsole_isActive() {
         // Console can only be active if its in the active state
         if (sm_getCurrentState(_ctx.mySMId)==MS_ACTIVE) {
             // If got input in last 30s we count it as 'in use'
-            if ((TMMgr_getTime() - _ctx.lastInputTS) < 30000) {
+            if ((TMMgr_getRelTimeSecs() - _ctx.lastInputTS) < 30) {
                 return true;
             }
             // else its not active really (ie caller could do something else with uart - but must stop/start the console in this case)

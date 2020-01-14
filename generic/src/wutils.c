@@ -45,7 +45,7 @@ void wassert_fn(const char* file, int lnum) {
     hal_gpio_init_out(LED_2, 0);
     // if ebugging,  halt busy flashing leds
     // else reboot
-    uint32_t et = TMMgr_getRelTime();
+    uint32_t et = TMMgr_getRelTimeMS();
     while(1) {
         int total = 0;
         // busy wait - don't let OS do anything or run another task
@@ -56,7 +56,7 @@ void wassert_fn(const char* file, int lnum) {
         hal_gpio_toggle(LED_1);        
         hal_gpio_toggle(LED_2);        
         // reboot after 30s
-        if ((TMMgr_getRelTime()-et)>30000) {
+        if ((TMMgr_getRelTimeMS()-et)>30000) {
             RMMgr_reboot(RM_ASSERT);
         }
     }

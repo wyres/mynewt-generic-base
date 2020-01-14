@@ -60,10 +60,10 @@ static struct {
         SR_NOISE_CBFN_t fn;
         void* ctx;
     } noiseCBs[MAX_CBS];
-    uint32_t lastReadTS;
-    uint32_t lastSignificantChangeTS;
-    uint32_t lastButtonPressTS;
-    uint32_t lastButtonReleaseTS;
+    uint32_t lastReadTS;                // in seconds since boot
+    uint32_t lastSignificantChangeTS;   // in seconds since boot
+    uint32_t lastButtonPressTS;         // in ms since boot
+    uint32_t lastButtonReleaseTS;       // in ms since boot
     uint8_t currButtonState;
     uint8_t lastButtonState;
     uint8_t lastButtonPressType;
@@ -76,7 +76,7 @@ static struct {
     uint16_t lastBattmV;
     uint32_t lastPressurePa;
     uint8_t lastLight;
-    uint32_t lastNoiseTS;
+    uint32_t lastNoiseTS;   // in seconds since boot
     uint8_t noiseFreqkHz;
     uint8_t noiseLeveldB;
     uint16_t currADC1mV;
@@ -198,7 +198,7 @@ void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb)
     }
 }
 
-uint32_t SRMgr_getLastEnvChangeTime() 
+uint32_t SRMgr_getLastEnvChangeTimeSecs() 
 {
     return _ctx.lastSignificantChangeTS;
 }
@@ -263,7 +263,7 @@ uint8_t SRMgr_getLight()
     readEnv();
     return _ctx.currLight;
 }
-uint32_t SRMgr_getLastNoiseTime() 
+uint32_t SRMgr_getLastNoiseTimeSecs() 
 {
     readEnv();      // ensure uptodate
     return _ctx.lastNoiseTS;
@@ -342,7 +342,7 @@ bool SRMgr_updateEnvs()
     }
     if (changed) 
     {
-        _ctx.lastSignificantChangeTS = TMMgr_getRelTime();
+        _ctx.lastSignificantChangeTS = TMMgr_getRelTimeSecs();
     }
     return changed;
 }
@@ -386,14 +386,14 @@ static void buttonCheckDebounced(struct os_event* e)
         if (_ctx.currButtonState==SR_BUTTON_PRESSED) 
         {
             // Pressed
-            _ctx.lastButtonPressTS = TMMgr_getRelTime();
+            _ctx.lastButtonPressTS = TMMgr_getRelTimeMS();
             // TODO start timer to do on-going button press length checks (ie signal 'long press' while not yet released)
 
         } 
         else 
         {
             // released
-            _ctx.lastButtonReleaseTS = TMMgr_getRelTime();
+            _ctx.lastButtonReleaseTS = TMMgr_getRelTimeMS();
             // Manage "short press", "2s press", "5s press", "10s press" etc
             _ctx.lastButtonPressType = calcButtonPressType(_ctx.lastButtonReleaseTS - _ctx.lastButtonPressTS);
         }
@@ -402,7 +402,7 @@ static void buttonCheckDebounced(struct os_event* e)
         {
             if (_ctx.buttonCBs[i].fn!=NULL) 
             {
-                (*(_ctx.buttonCBs[i].fn))(_ctx.buttonCBs[i].ctx, _ctx.currButtonState, calcButtonPressType(TMMgr_getRelTime() - _ctx.lastButtonPressTS));
+                (*(_ctx.buttonCBs[i].fn))(_ctx.buttonCBs[i].ctx, _ctx.currButtonState, calcButtonPressType(TMMgr_getRelTimeMS() - _ctx.lastButtonPressTS));
             }
         }
     } // else it toggled but settled into same state as before -> no transition
@@ -449,7 +449,7 @@ static void readEnv()
 {
     if (_ctx.isActive) 
     {
-        _ctx.lastReadTS = TMMgr_getRelTime();
+        _ctx.lastReadTS = TMMgr_getRelTimeSecs();
 
         if (EXT_BUTTON>=0) 
         {

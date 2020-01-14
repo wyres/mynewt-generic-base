@@ -19,20 +19,35 @@
 
 #include "wyres-generic/timemgr.h"
 
-static uint32_t _bootTime=0;
+static uint32_t _bootTimeSecs=0;
 
-uint32_t TMMgr_getRelTime() {
+// Since boot (warning wraps after 49 days as is in ms)
+uint32_t TMMgr_getRelTimeMS() {
     int64_t t = os_get_uptime_usec();
     return (uint32_t)(t/1000);
 }
 
-// Since epoche
-uint32_t TMMgr_getTime() {
-    return _bootTime+TMMgr_getRelTime();
+// since boot in secs (no real wrapping issue)
+uint32_t TMMgr_getRelTimeSecs() {
+    int64_t t = os_get_uptime_usec();
+    return (uint32_t)(t/1000000);
 }
 
-void TMMgr_setBootTime(uint32_t t) {
-    _bootTime = t;
+uint32_t TMMgr_getTimeSecs() {
+    return _bootTimeSecs+TMMgr_getRelTimeSecs();
+}
+
+int32_t TMMgr_timeDelta(uint32_t t1MS, uint32_t t2MS) {
+    // deal with fact that timestamps in ms since boot wrap after 49.7 days
+
+    return t2MS - t1MS;
+}
+int32_t TMMgr_deltaNow(uint32_t tMS) {
+    return TMMgr_timeDelta(TMMgr_getRelTimeMS(), tMS);
+}
+
+void TMMgr_setBootTime(uint32_t tSecsSinceEpoch) {
+    _bootTimeSecs = tSecsSinceEpoch;
 }
 
 uint32_t TMMgr_busySleep(uint32_t ms) {

@@ -42,10 +42,10 @@ static struct {
     int8_t x;
     int8_t y;
     int8_t z;
-    uint32_t lastMoveTime;
-    uint32_t lastFallTime;
-    uint32_t lastShockTime;
-    uint32_t lastOrientTime;
+    uint32_t lastMoveTimeS;
+    uint32_t lastFallTimeS;
+    uint32_t lastShockTimeS;
+    uint32_t lastOrientTimeS;
     bool movedSinceLastCheck;
     MM_ORIENT orientation;
     LP_ID_t lpUserId;
@@ -141,7 +141,7 @@ void MMMgr_check()
             if (hasDetected)
             {
                 _ctx.movedSinceLastCheck = true;
-                _ctx.lastMoveTime = TMMgr_getRelTime();
+                _ctx.lastMoveTimeS = TMMgr_getRelTimeSecs();
                 log_debug("mm:MOVED");
             }
         }
@@ -154,7 +154,7 @@ void MMMgr_check()
         {
             if (hasDetected)
             {
-                _ctx.lastFallTime = TMMgr_getRelTime();
+                _ctx.lastFallTimeS = TMMgr_getRelTimeSecs();
                 log_debug("mm:FALLEN");
             }
         }
@@ -186,32 +186,32 @@ void MMMgr_check()
 
 uint32_t MMMgr_getLastMovedTime() 
 {
-    return _ctx.lastMoveTime;
+    return _ctx.lastMoveTimeS;
 }
-bool MMMgr_hasMovedSince(uint32_t reltime) 
+bool MMMgr_hasMovedSince(uint32_t reltimeS) 
 {
-    return (_ctx.lastMoveTime>reltime);
+    return (_ctx.lastMoveTimeS>reltimeS);
 }
 uint32_t MMMgr_getLastFallTime() 
 {
-    return _ctx.lastFallTime;
+    return _ctx.lastFallTimeS;
 }
-bool MMMgr_hasFallenSince(uint32_t reltime)
+bool MMMgr_hasFallenSince(uint32_t reltimeS)
 {
-    return (_ctx.lastFallTime>reltime);
+    return (_ctx.lastFallTimeS>reltimeS);
 }
 
 uint32_t MMMgr_getLastShockTime() 
 {
-    return _ctx.lastShockTime;
+    return _ctx.lastShockTimeS;
 }
-bool MMMgr_hasShockedSince(uint32_t reltime) 
+bool MMMgr_hasShockedSince(uint32_t reltimeS) 
 {
-    return (_ctx.lastShockTime>reltime);
+    return (_ctx.lastShockTimeS>reltimeS);
 }
 uint32_t MMMgr_getLastOrientTime() 
 {
-    return _ctx.lastOrientTime;
+    return _ctx.lastOrientTimeS;
 }
 MM_ORIENT MMMgr_getOrientation() 
 {
@@ -269,7 +269,7 @@ static void checkOrientationChange()
 {
     if (MMMgr_getOrientation() != _ctx.orientation) 
     {
-        _ctx.lastOrientTime = TMMgr_getRelTime();
+        _ctx.lastOrientTimeS = TMMgr_getRelTimeSecs();
         _ctx.orientation = MMMgr_getOrientation();
         for(int i=0;i<MAX_MMCBFNS;i++) 
         {

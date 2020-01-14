@@ -387,7 +387,7 @@ bool gps_getData(gps_data_t* d) {
 // Get age of the last fix we got, or -1 if never had a fix
 int32_t gps_lastGPSFixAgeMins() {
     if (_ctx.gpsData.rxAt>0) {
-        return (TMMgr_getRelTime() - _ctx.gpsData.rxAt)/(60*1000);
+        return (TMMgr_getRelTimeSecs() - _ctx.gpsData.rxAt)/(60);
     } else {
         return -1;
     }
@@ -454,7 +454,7 @@ static void gps_mgr_rxcb(struct os_event* ev) {
         _ctx.gpsData.alt = newdata.alt;
         _ctx.gpsData.prec = newdata.prec;
         _ctx.gpsData.nSats = newdata.nSats;
-        _ctx.gpsData.rxAt = TMMgr_getRelTime();
+        _ctx.gpsData.rxAt = TMMgr_getRelTimeSecs();
         // ok
         os_mutex_release(&_ctx.dataMutex);
 

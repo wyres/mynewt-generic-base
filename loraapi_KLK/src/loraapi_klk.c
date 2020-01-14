@@ -298,7 +298,7 @@ LORAWAN_REQ_ID_t lora_api_radio_tx(uint32_t abs_time, LORAWAN_SF_t sf, uint32_t 
             req->atTxMS = abs_time;
 
             // TODO : check time is after now, and no other radio request using it....
-            os_callout_reset(&req->timer, os_time_ms_to_ticks32(abs_time - TMMgr_getTime()));
+            os_callout_reset(&req->timer, os_time_ms_to_ticks32(abs_time - TMMgr_getRelTimeMS()));
 
             return req;
         }
@@ -322,7 +322,7 @@ LORAWAN_REQ_ID_t lora_api_radio_rx(uint32_t abs_time, LORAWAN_SF_t sf, uint32_t 
             req->atRxMS = abs_time;
             req->tRxMS = timeoutms;
             // TODO : check time is after now, and no other radio request using it....
-            os_callout_reset(&req->timer, os_time_ms_to_ticks32(abs_time - TMMgr_getTime()));
+            os_callout_reset(&req->timer, os_time_ms_to_ticks32(abs_time - TMMgr_getRelTimeMS()));
 
             return req;
         }
@@ -574,7 +574,7 @@ static bool do_lora_join() {
     TxLoraWanReq_t* req = &_loraCtx.txLoraWANReq;
     req->cbfn = stack_joinTXUL_cb;
     // put current time in UL message?
-    _joinUL.uptime = TMMgr_getTime();
+    _joinUL.uptime = TMMgr_getRelTimeSecs();
     req->data = (uint8_t*)(&_joinUL);
     req->sz = sizeof(_joinUL);        // we send just our uptime
     req->port = 1;

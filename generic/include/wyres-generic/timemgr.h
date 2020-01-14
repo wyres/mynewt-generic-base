@@ -19,9 +19,10 @@
 extern "C" {
 #endif
 
-uint32_t TMMgr_getRelTime();
-uint32_t TMMgr_getTime();
-void TMMgr_setBootTime(uint32_t t);
+uint32_t TMMgr_getRelTimeMS();
+uint32_t TMMgr_getRelTimeSecs();
+uint32_t TMMgr_getTimeSecs();
+void TMMgr_setBootTime(uint32_t tSecsEpoch);
 uint32_t TMMgr_busySleep(uint32_t ms);
 
 #ifdef __cplusplus

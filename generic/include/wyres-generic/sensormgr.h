@@ -29,13 +29,13 @@ typedef void (*SR_NOISE_CBFN_t)(void* ctx, int noiseFreq, int noiseDBm);
 void SRMgr_start();
 void SRMgr_stop();
 
-uint32_t SRMgr_getLastButtonTime();
+uint32_t SRMgr_getLastButtonTimeSecs();
 // Register callback to be notified when button changes state (also means button is active during deep sleep)
 bool SRMgr_registerButtonCB(SR_BUTTON_CBFN_t cb, void* ctx);
 // Remove registration - if noone is registered then button state only checked at UL time..
 void SRMgr_unregisterButtonCB(SR_BUTTON_CBFN_t cb);
 
-uint32_t SRMgr_getLastNoiseTime();
+uint32_t SRMgr_getLastNoiseTimeSecs();
 uint8_t SRMgr_getNoiseFreqkHz();
 uint8_t SRMgr_getNoiseLeveldB();
 // Register callback to be notified when noise is detected (also means micro is active during deep sleep)
@@ -43,8 +43,8 @@ bool SRMgr_registerNoiseCB(SR_NOISE_CBFN_t cb, void* ctx);
 // Remove registration - if noone is registered then micro input only checked at UL time..
 void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb);
 
-// When did temp, pressure, battery, light last change 'significantly'?
-uint32_t SRMgr_getLastEnvChangeTime();
+// When did temp, pressure, battery, light last change 'significantly'? In seconds since boot.
+uint32_t SRMgr_getLastEnvChangeTimeSecs();
 int16_t SRMgr_getTempdC();
 int32_t SRMgr_getPressurePa();
 uint16_t SRMgr_getBatterymV();
@@ -54,6 +54,7 @@ uint16_t SRMgr_getADC2mV();
 uint8_t SRMgr_getButton();
 bool SRMgr_hasButtonChanged();
 uint8_t SRMgr_getLastButtonPressType();
+/* timestamps in ms since boot */
 uint32_t SRMgr_getLastButtonPressTS();
 uint32_t SRMgr_getLastButtonReleaseTS();
 bool SRMgr_hasTempChanged();

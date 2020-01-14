@@ -153,7 +153,7 @@ void RMMgr_addLogFn(void* caller) {
     }
 
     FNP_LOG_t* entry = (FNP_LOG_t *)&_fnList[index];
-    entry->ts = TMMgr_getRelTime();
+    entry->ts = TMMgr_getRelTimeMS();
     entry->caller = caller;
     // update next free index
     _fnList[FN_LIST_SZ] = ((index+sizeof(FNP_LOG_t)) % FN_LIST_SZ);

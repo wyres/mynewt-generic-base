@@ -26,7 +26,7 @@ typedef struct gps_data {
     int32_t lon;
     int32_t alt;
     int32_t prec;      // recision in m. -1 means the fix is invalid
-    uint32_t rxAt;      // timestamp in ms since boot of when this position was updated
+    uint32_t rxAt;      // timestamp in secs since boot of when this position was updated
     uint8_t nSats;      // number of satellites used for this fix
 } gps_data_t;
 typedef enum { GPS_COMM_OK, GPS_COMM_FAIL, GPS_SATOK, GPS_SATLOSS, GPS_NEWFIX, GPS_DONE } GPS_EVENT_TYPE_t;

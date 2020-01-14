@@ -28,13 +28,14 @@ void MMMgr_check();
 bool MMMgr_registerMovementCB(MM_CBFN_t cb);
 // Last time a "movement" was detected
 uint32_t MMMgr_getLastMovedTime();
-bool MMMgr_hasMovedSince(uint32_t reltime);
+// Has it moved since this relative time (in seconds since epoch)
+bool MMMgr_hasMovedSince(uint32_t reltimeSecs);
 // Last time free fall detected
 uint32_t MMMgr_getLastFallTime();
-bool MMMgr_hasFallenSince(uint32_t reltime);
+bool MMMgr_hasFallenSince(uint32_t reltimeSecs);
 // Last time got a shock (>2G)
 uint32_t MMMgr_getLastShockTime();
-bool MMMgr_hasShockedSince(uint32_t reltime);
+bool MMMgr_hasShockedSince(uint32_t reltimeSecs);
 // Register a callback for when orientation change detected
 bool MMMgr_registerOrientationCB(MM_CBFN_t cb);
 // Last time orientation changed to new value
