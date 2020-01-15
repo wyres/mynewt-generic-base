@@ -129,8 +129,9 @@ bool MMMgr_registerOrientationCB(MM_CBFN_t cb) {
     return false;
 }
 // poll accelero for x,y,z,moved,fall,shock
+// returns true if hw ok, false if access fails
 // TODO possbily should 'start'/'stop' to let accelero have time to decide which way is up before reading values?
-void MMMgr_check() 
+bool MMMgr_check() 
 {
     bool hasDetected = false;
     if (ACC_activate() == ACC_SUCCESS) 
@@ -179,9 +180,11 @@ void MMMgr_check()
     else 
     {
         log_warn("mm:accelero failed to activate");
+        return false;
     }
     checkMoved();
     checkOrientationChange();
+    return true;
 }
 
 uint32_t MMMgr_getLastMovedTime() 

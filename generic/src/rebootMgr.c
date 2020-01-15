@@ -45,6 +45,22 @@ static uint8_t _fnList[FN_LIST_SZ+1];
 
 static void* _assertCallerFn = 0;
 
+static enum RM_reason mapHalResetCause() {
+    switch(hal_reset_cause()) {
+        case HAL_RESET_POR:
+            return RM_HARD_RESET;
+        case HAL_RESET_BROWNOUT:
+            return RM_HW_BROWNOUT;
+        case HAL_RESET_PIN:
+            return RM_HW_NRST;
+        case HAL_RESET_WATCHDOG:
+            return RM_HW_WG;
+        case HAL_RESET_SOFT:
+            return RM_HW_BLAMES_SW;
+        default:
+            return RM_HARD_RESET;
+    }
+}
 // run at startup
 void reboot_init(void) {
     // get reboot reason from PROM
@@ -54,6 +70,10 @@ void reboot_init(void) {
     if (_rebootReasonList[REBOOT_LIST_SZ]>REBOOT_LIST_SZ) {
         log_noout("reboot list index is bad %d", _rebootReasonList[REBOOT_LIST_SZ]);
         _rebootReasonList[REBOOT_LIST_SZ] = 0;
+    }
+    // If last reboot due to hw reset (ie didn't go via the RMMgr_reboot() call), then ask HAL for more details
+    if (_rebootReasonList[_rebootReasonList[REBOOT_LIST_SZ]]==RM_HARD_RESET) {
+        _rebootReasonList[_rebootReasonList[REBOOT_LIST_SZ]] = mapHalResetCause();
     }
     // Store the last restart reason in separate var for ease of use
     _appReasonCode = _rebootReasonList[_rebootReasonList[REBOOT_LIST_SZ]];
@@ -102,20 +122,6 @@ const char* RMMgr_getResetReason() {
 }
 uint16_t RMMgr_getResetReasonCode() {
     // Recovered from PROM at boot time
-    // hal reset causes for STM32L1:
-    /*
-    if (reg & RCC_CSR_WWDGRSTF) {
-        reason = HAL_RESET_WATCHDOG;            // 3
-    } else if (reg & RCC_CSR_SFTRSTF) {
-        reason = HAL_RESET_SOFT;                // 4
-    } else if (reg & RCC_CSR_PINRSTF) {
-        reason = HAL_RESET_PIN;                 // 2
-    } else if (reg & RCC_CSR_LPWRRSTF) {
-        // For L1xx this is low-power reset 
-        reason = HAL_RESET_BROWNOUT;            // 5
-    } else {
-        reason = HAL_RESET_POR;                 // 1
-    */
     return _appReasonCode + (hal_reset_cause() << 8);
 }
 void RMMgr_getResetReasonBuffer(uint8_t* buf, uint8_t sz) {

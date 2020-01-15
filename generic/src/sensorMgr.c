@@ -111,6 +111,13 @@ void SRMgr_init(void)
         // if ext button is enabled, its IRQ etc runs all the time even during deepsleep
         GPIO_define_irq("button", EXT_BUTTON, buttonCB, &_ctx, HAL_GPIO_TRIG_BOTH, HAL_GPIO_PULL_UP, LP_DEEPSLEEP);
     }
+    // config alti on i2c
+    if (ALTI_init() != ALTI_SUCCESS)
+    {
+        log_warn("SM:Alti_init fail");
+        // TODO set hw err flags to know about this
+    }
+
     // Register for to set desired low power mode. No need for callback to change setup
     _ctx.lpUserId = LPMgr_register(NULL);
     // We are currently ok with deepsleep during idle as not "started"
@@ -377,6 +384,10 @@ static void buttonCB(void* arg)
 // Called 100ms after first change of button state. Check the state now that it has settled
 static void buttonCheckDebounced(struct os_event* e) 
 {
+    if (EXT_BUTTON<0) {
+        return;
+    }
+
     // Read the button state NOW
     _ctx.currButtonState = mapButton(GPIO_read(EXT_BUTTON));
     // And compare to when it first changed - only if its still different will we deal with it
@@ -433,11 +444,11 @@ static void config()
             GPIO_define_adc("battery", BATTERY_GPIO, BATTERY_ADCCHAN, LP_DOZE);
     //        log_debug("SM:batt");
         }
-        // config alti on i2c
-        if (ALTI_init() != ALTI_SUCCESS)
+        if (ALTI_activate() != ALTI_SUCCESS)
         {
-            log_warn("SM:Alti_init fail");
+            log_warn("SM:Erractivate alti");
         }
+
         // config noise detector on micro
         // TODO
     }
@@ -494,22 +505,12 @@ static void readEnv()
         {
             _ctx.currADC2mV = GPIO_readADC(GPIO_ADC2);
         }
-        if (ALTI_activate() == ALTI_SUCCESS)
+        if (ALTI_readAllData(&_ctx.currPressurePa, &_ctx.currTempdC) != ALTI_SUCCESS)
         {
-            if (ALTI_readAllData(&_ctx.currPressurePa, &_ctx.currTempdC) != ALTI_SUCCESS)
-            {
-                log_warn("SM:Err read alti");
-            }
-            if (ALTI_sleep() != ALTI_SUCCESS)
-            {
-                log_warn("SM:Err sleep alti");
-            }
-//            log_debug("SM:temp %d", _ctx.currTempdC);
-//            log_debug("SM:press %d", _ctx.currPressurePa);
-        }
-        else
-        {
-            log_warn("SM:Erractivate alti");
+            log_warn("SM:Err read alti");
+        } else {
+            //            log_debug("SM:temp %d", _ctx.currTempdC);
+            //            log_debug("SM:press %d", _ctx.currPressurePa);
         }
     }
 }
@@ -540,7 +541,12 @@ static void deconfig()
         }
         // accelero power state controlled by MovementMgr, no need for us to tell him
 
-        // deconfig alti on i2c
+        // sleep the alti on i2c
+        if (ALTI_sleep() != ALTI_SUCCESS)
+        {
+            log_warn("SM:Err sleep alti");
+        }
+
         // TODO
         // config noise detector on micro
         // TODO
