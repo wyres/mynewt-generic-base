@@ -55,10 +55,16 @@ LP_ID_t LPMgr_register(LP_CBFN_t cb) {
 // THe level of sleeping when someone (the OS) asks to enter 'low power mode'
 void LPMgr_setLPMode(LP_ID_t id, LP_MODE_t m) {
     assert(id>=0 && id < MAX_LPCBFNS);
+//    LP_MODE_t prevmode = _ctx.lpUsers[id].desiredMode;
     // Set this guy's desired mode
     _ctx.lpUsers[id].desiredMode = m;
     _ctx.sleepMode = calcNextSleepMode();
-    // Taken into account next time we do LPMgr_entersleep()
+    // new mode taken into account next time we sleep as BSP should call LPMgr_getMode() to get a HAL related sleep level
+/* for debug only and be careful
+    if (prevmode != m) {
+        log_warn("LP::%d:%d", m, _ctx.sleepMode);
+    }
+*/
 }
 LP_MODE_t LPMgr_getNextLPMode() {
     _ctx.sleepMode = calcNextSleepMode();

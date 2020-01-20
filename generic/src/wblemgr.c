@@ -15,6 +15,7 @@
 #include "os/os.h"
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/wskt_user.h"
+#include "wyres-generic/timemgr.h"
 #include "wyres-generic/wblemgr.h"
 #include "wyres-generic/lowpowermgr.h"
 #include "wyres-generic/gpiomgr.h"
@@ -27,7 +28,7 @@
 #define WBLE_UART    MYNEWT_VAL(WBLE_UART)
 //#define WBLE_TASK_PRIO       MYNEWT_VAL(WBLE_TASK_PRIO)
 //#define WBLE_TASK_STACK_SZ   OS_STACK_ALIGN(256)
-#define MAX_IBEACONS    MYNEWT_VAL(WBLE_MAXIBS)
+//#define MAX_IBEACONS    MYNEWT_VAL(WBLE_MAXIBS)
 
 static char* BLE_CHECK="AT+WHO\r\n";
 //static char* BLE_CONFIG="AT+CONFIG,00B4,00B4,0000,1,1\r\n";
@@ -66,16 +67,14 @@ static struct blectx {
     uint16_t majorStart;
     uint16_t majorEnd;
     uint8_t ibListSz;
-    ibeacon_data_t ibList[MAX_IBEACONS];
+    ibeacon_data_t* ibList;
     uint8_t nbRxNew;
     uint8_t nbRxNewR;
     uint8_t nbRxUpdate;
     uint8_t nbRxNoSpace;
     uint8_t nbRxBadMajor;
-} _ctx = {
-    .lastDataTime = 0,
-    .cbfn=NULL,
-};
+} _ctx;     // in bss so set to all 0 by definition
+
 // State machine for BLE control
 enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_WAIT_TYPE_SCAN, MS_BLE_WAIT_TYPE_IB, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, 
     MS_BLE_IBEACON, MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
@@ -85,8 +84,6 @@ enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_SCAN, ME_BLE_IBEACON, ME_BLE_STOP
 // predeclare privates
 //static void wble_mgr_task(void* arg);
 static void wble_mgr_rxcb(struct os_event* ev);
-// manage IB list
-static void resetIBList();
 static ibeacon_data_t*  getIB(int idx);
 // Add scanned IB to list if not already present else update it
 static int addIB(ibeacon_data_t* ibp);
@@ -385,7 +382,6 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
-            resetIBList();      // throw away old list
             // rx data mode
             wskt_write(ctx->cnx, (uint8_t*)BLE_RXMODE, strlen(BLE_RXMODE));
             // And start the scanning
@@ -588,12 +584,15 @@ void wble_start(void* c, WBLE_CB_FN_t cb) {
     ctx->cbfn = cb;
     sm_sendEvent(ctx->mySMId, ME_BLE_ON, NULL);
 }
-void wble_scan_start(void* c, const uint8_t* uuid, uint16_t majorStart, uint16_t majorEnd) {
+void wble_scan_start(void* c, const uint8_t* uuid, uint16_t majorStart, uint16_t majorEnd, uint32_t sz, ibeacon_data_t* list) {
     assert(c!=NULL);
+    assert(list!=NULL);
     struct blectx* ctx = (struct blectx*)c;
     memcpy(ctx->uuid, uuid, sizeof(_ctx.uuid));
     ctx->majorStart = majorStart;
     ctx->majorEnd = majorEnd;
+    ctx->ibListSz = sz;
+    ctx->ibList = list;
     sm_sendEvent(ctx->mySMId, ME_BLE_SCAN, NULL);
 
 }
@@ -621,12 +620,35 @@ void wble_stop(void* c) {
     sm_sendEvent(ctx->mySMId, ME_BLE_OFF, NULL);
 }
 
-// get number of ibs we have seen so far
-int wble_getNbIB(void* c) {
+// get number of ibs we have seen so far  (optionally count only those active in last X seconds if activeInLastX >0)
+int wble_getNbIBActive(void* c, uint32_t activeInLastX) {
+    assert(c!=NULL);
+    uint32_t now = TMMgr_getRelTimeSecs();
+    int nb=0;
+    struct blectx* ctx = (struct blectx*)c;
+    for(int i=0;i<ctx->ibListSz; i++) {
+        // lastSeenAt == 0 -> unused entry
+        if (ctx->ibList[i].lastSeenAt!=0 &&
+            (activeInLastX==0 || ((now - ctx->ibList[i].lastSeenAt) < activeInLastX))) {
+            nb++;
+        }
+    }
+    return nb;
+}
+// reset the list of ibeacon data actives, all or just those not see in the last X seconds
+void wble_resetList(void* c, uint32_t notSeenInLastX) {
     assert(c!=NULL);
     struct blectx* ctx = (struct blectx*)c;
-    return ctx->ibListSz;
+    uint32_t now = TMMgr_getRelTimeSecs();
+    for(int i=0;i<ctx->ibListSz; i++) {
+        // lastSeenAt == 0 -> unused entry
+        if (ctx->ibList[i].lastSeenAt!=0 &&
+               (notSeenInLastX==0 || ((now - ctx->ibList[i].lastSeenAt) > notSeenInLastX))) {
+            ctx->ibList[i].lastSeenAt=0;
+        }
+    }
 }
+
 // get the list of IBs (best to do this once stopped)
 ibeacon_data_t* wble_getIBList(void* c, int* sz) {
     assert(c!=NULL);
@@ -650,7 +672,7 @@ int wble_getSortedIBList(void* c, int sz, ibeacon_data_t* list) {
         int bestRssi = -150;
         int idxToGet = -1;
         for(int i=0;i<ctx->ibListSz;i++) {
-            if (ctx->ibList[i].rssi>bestRssi && ctx->ibList[i].rssi<prevRssi) {
+            if (_ctx.ibList[i].lastSeenAt!=0 && ctx->ibList[i].rssi>bestRssi && ctx->ibList[i].rssi<prevRssi) {
                 idxToGet = i;
                 bestRssi = ctx->ibList[i].rssi;
             }
@@ -660,7 +682,7 @@ int wble_getSortedIBList(void* c, int sz, ibeacon_data_t* list) {
             // if N with same RSSI, idxToGet shows the first in the list.
             // go from there to the end, and add all those with the same 'best' rssi.
             for(int i=idxToGet;i<ctx->ibListSz;i++) {
-                if (ctx->ibList[i].rssi == bestRssi) {
+                if (_ctx.ibList[i].lastSeenAt!=0 && ctx->ibList[i].rssi == bestRssi) {
                     list[insert].major = ctx->ibList[i].major;
                     list[insert].minor = ctx->ibList[i].minor;
                     list[insert].rssi = ctx->ibList[i].rssi;
@@ -688,15 +710,6 @@ static void wble_mgr_task(void* arg) {
 }
 */
 // manage IB list
-static void resetIBList() {
-    _ctx.ibListSz = 0;
-    // reset stats also
-    _ctx.nbRxNew=0;
-    _ctx.nbRxNewR=0;
-    _ctx.nbRxUpdate=0;
-    _ctx.nbRxNoSpace=0;
-    _ctx.nbRxBadMajor=0;
-}
 static ibeacon_data_t* getIB(int idx) {
     if (idx<0 || idx>=_ctx.ibListSz) {
         return NULL;
@@ -707,41 +720,36 @@ static ibeacon_data_t* getIB(int idx) {
 // Add scanned IB to list if not already present  else update it
 static int addIB(ibeacon_data_t* ibp) {
     // Find if already in list, update if so
-    int worstRSSIIdx = 0;
-    int8_t worstRSSI = 0;
+    int freeEntry = -1;
     for(int i=0;i<_ctx.ibListSz; i++) {
-        if (ibp->major==_ctx.ibList[i].major &&
-            ibp->minor==_ctx.ibList[i].minor) {
+        // lastSeenAt == 0 -> unused entry
+        if (_ctx.ibList[i].lastSeenAt!=0) {
+            if (ibp->major==_ctx.ibList[i].major &&
+                    ibp->minor==_ctx.ibList[i].minor) {
                 _ctx.ibList[i].rssi = ibp->rssi;
                 _ctx.ibList[i].extra = ibp->extra;
+                _ctx.ibList[i].lastSeenAt = TMMgr_getRelTimeSecs();
                 _ctx.nbRxUpdate++;
                 return i;
-        }
-        // Find worst rssi in list while we're here
-        if (_ctx.ibList[i].rssi < worstRSSI) {
-            worstRSSI = _ctx.ibList[i].rssi;
-            worstRSSIIdx = i;
+            }
+        } else {
+            // Find free entry in list while we're here in case we need to insert
+            if (freeEntry < 0) {
+                freeEntry = i;
+            }
         }
     }
-    // space in list to add it?
-    if (_ctx.ibListSz<MAX_IBEACONS) {
-        // yes. add to end
-        _ctx.ibList[_ctx.ibListSz].major = ibp->major;
-        _ctx.ibList[_ctx.ibListSz].minor = ibp->minor;
-        _ctx.ibList[_ctx.ibListSz].rssi = ibp->rssi;
-        _ctx.ibList[_ctx.ibListSz].extra = ibp->extra;
-        _ctx.ibListSz++;
+    // Not in the last, do we have  space in list to add it?
+    if (freeEntry>=0) {
+        // yes.
+        _ctx.ibList[freeEntry].major = ibp->major;
+        _ctx.ibList[freeEntry].minor = ibp->minor;
+        _ctx.ibList[freeEntry].rssi = ibp->rssi;
+        _ctx.ibList[freeEntry].extra = ibp->extra;
+        _ctx.ibList[freeEntry].new = true;
+        _ctx.ibList[freeEntry].lastSeenAt = TMMgr_getRelTimeSecs();
         _ctx.nbRxNew++;
-        return (_ctx.ibListSz - 1);
-    }
-    // no, see if it is better rssi than the worst guy, and replace him if so
-    if (ibp->rssi > worstRSSI) {
-        _ctx.ibList[worstRSSIIdx].major = ibp->major;
-        _ctx.ibList[worstRSSIIdx].minor = ibp->minor;
-        _ctx.ibList[worstRSSIIdx].rssi = ibp->rssi;
-        _ctx.ibList[worstRSSIIdx].extra = ibp->extra;
-        _ctx.nbRxNewR++;
-        return worstRSSIIdx;
+        return freeEntry;
     }
     // tant pis
     _ctx.nbRxNoSpace++;

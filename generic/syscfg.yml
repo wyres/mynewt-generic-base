@@ -54,9 +54,6 @@ syscfg.defs:
     SM_MAX_EVENT_TIMERS:
         description: "max per-event specific timers allowed in a state machine"
         value: 2
-    WBLE_MAXIBS:
-        description: "max number of ibeacons held by the wble scanner per scan"
-        value: 16
     CFG_MAX_KEYS:
         description: "max number of config keys we will ever have"
         value: 200

@@ -39,13 +39,7 @@ struct cfg {
 //        uint8_t len;
 //        uint16_t off;
 //    } indexTable[MAX_KEYS];
-} _cfg = {
-    .nbKeys=0,
-    .indexStart=0,
-    .storeStart=0,
-    .storeOffset=0,
-    .nCBs=0,
-};
+} _cfg;     // all inited to 0 by definition (bss)
 
 static int createKey(uint16_t k, uint8_t l, uint8_t* d);
 static int findKeyIdx(uint16_t k);

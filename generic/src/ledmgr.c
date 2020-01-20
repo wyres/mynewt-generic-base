@@ -30,7 +30,7 @@
 
 // Led task should be high pri as does very little but wants to do it in real time
 #define LED_TASK_PRIO       MYNEWT_VAL(LEDMGR_TASK_PRIO)
-#define LED_TASK_STACK_SZ   OS_STACK_ALIGN(64)
+#define LED_TASK_STACK_SZ   OS_STACK_ALIGN(128)
 
 // internals
 #define ISSET(v, p) ((v & (1<<p))!=0)

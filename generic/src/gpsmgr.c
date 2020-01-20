@@ -58,18 +58,7 @@ static struct appctx {
     GPS_CB_FN_t cbfn;
     uint8_t commOk;     // Count of good lines received or 0 if not active
     uint8_t startupCnt; // count of times we see the gps staryup response in each session to detect brownouts
-} _ctx = {
-    .powerMode = POWER_ONOFF,
-    .lastFixTime = 0,
-    .gpsData = {
-        .prec = -1,
-        .lat = 0,
-        .lon = 0,
-        .alt = 0,
-        .rxAt = 0,
-    },
-    .cbfn=NULL,
-};
+} _ctx;     // all set to 0 at boot by definition
 
 
 // Define my state ids
@@ -332,6 +321,10 @@ static const SM_STATE_t _mySM[MS_LAST] = {
 
 // Called from appinit or app core module
 void gps_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect) {
+    // _ctx data set to all 0 at startup by definition. Init non-0 explicit defaults here
+    _ctx.powerMode = POWER_ONOFF;
+    _ctx.gpsData.prec = -1;
+
     _ctx.uartDevice = dname;
     _ctx.baudrate=baudrate;
     _ctx.uartSelect=uartSelect;
