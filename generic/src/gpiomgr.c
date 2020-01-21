@@ -32,16 +32,16 @@
 
 typedef struct gpio {
     int8_t pin;
+    bool irqEn;
+    bool lpEnabled;
+    hal_gpio_irq_trig_t trig;
+    hal_gpio_pull_t pull;
+    LP_MODE_t lpmode;
     GPIO_TYPE type;
     int adc_chan;
     int value;
     hal_gpio_irq_handler_t handler;
     void * arg;
-    bool irqEn;
-    hal_gpio_irq_trig_t trig;
-    hal_gpio_pull_t pull;
-    LP_MODE_t lpmode;
-    bool lpEnabled;
     char name[GPIO_NAME_SZ+1];
 } GPIO_t;
 

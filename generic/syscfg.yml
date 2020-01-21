@@ -122,7 +122,12 @@ syscfg.defs:
         value: "1000010000"
 
 syscfg.vals:
-    # hook reboot and assert operations in mynewt OS
-#    HAL_SYSTEM_RESET_CB: wreboot_cb
-#    OS_ASSERT_CB: 1
-#    OS_ASSERT_FN_NAME: wassert_fn_cb
+    # check stack overflows always to ensure tasks stacks are correctly sized
+    OS_CTX_SW_STACK_CHECK: 1
+    # call our CB during mynewt assert handling
+    OS_ASSERT_CB: 1
+    # no FILE/LINE info in assert calls (uses too much space in image)
+    OS_CRASH_FILE_LINE: 0
+
+    # main() stack size- needs to be reasonable as we use it for event execution for certain mgrs (uart etc)
+    OS_MAIN_STACK_SIZE: 512

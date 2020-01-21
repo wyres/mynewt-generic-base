@@ -25,7 +25,7 @@ extern "C" {
 /*
  Manage GPIOs centrally to be able to deal with low power enter/exit
 */
-#define GPIO_NAME_SZ    (31)
+#define GPIO_NAME_SZ    (7)
 typedef enum  { GPIO_OUT, GPIO_IN, GPIO_IRQ, GPIO_ADC } GPIO_TYPE;
 
 /**
