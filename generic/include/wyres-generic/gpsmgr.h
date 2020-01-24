@@ -36,6 +36,8 @@ void gps_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t ua
 
 void gps_setPowerMode(GPS_POWERMODE_t m);
 bool gps_getData(gps_data_t* d);
+/* time in secs since boot of last time we got a good gps fix. 0 if never had one. */
+uint32_t gps_lastGPSFixTimeSecs();
 // Get age of the last fix we got, or -1 if never had a fix
 int32_t gps_lastGPSFixAgeMins();
 

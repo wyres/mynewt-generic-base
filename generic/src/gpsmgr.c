@@ -377,6 +377,11 @@ bool gps_getData(gps_data_t* d) {
 
     return ret;
 }
+/* time in secs since boot of last time we got a good gps fix. 0 if never had one. */
+uint32_t gps_lastGPSFixTimeSecs() {
+    return _ctx.gpsData.rxAt;
+}
+
 // Get age of the last fix we got, or -1 if never had a fix
 int32_t gps_lastGPSFixAgeMins() {
     if (_ctx.gpsData.rxAt>0) {
