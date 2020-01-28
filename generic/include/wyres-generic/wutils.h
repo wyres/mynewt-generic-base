@@ -68,7 +68,10 @@ enum LOGS_LEVEL { LOGS_DEBUG, LOGS_INFO, LOGS_RUN, LOGS_OFF };
 #define log_fn log_fn_fn
 
 // Utility functions tried and tested
+// sw test assert failure
 void wassert_fn(const char* file, int lnum);
+// hw test assert failure
+void wassert_hw_fault();
 // logging
 void log_init_console(bool enable);
 void log_init_dbg(uint8_t u);

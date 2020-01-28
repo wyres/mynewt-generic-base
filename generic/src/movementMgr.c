@@ -91,12 +91,12 @@ void movement_init(void)
     {
         // Can't log in sysinit called fns
         log_noout("accelero hw init fails");
-        assert(0);
+        wassert_hw_fault();
     }
     if (ACC_setDetectionMode(detectionMode, threshold, duration) != ACC_SUCCESS)
     {
         log_noout("accelero detection configuration fails");
-        assert(0);
+        wassert_hw_fault();
     }
 
     // register with LP mgr to de able to say what LP mode we are ok with

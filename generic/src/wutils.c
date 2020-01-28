@@ -62,6 +62,34 @@ void wassert_fn(const char* file, int lnum) {
     }
 }
 
+void wassert_hw_fault() {
+    // see https://gcc.gnu.org/onlinedocs/gcc/Return-Address.html
+    void* assert_caller = 0;
+    assert_caller = __builtin_extract_return_addr(__builtin_return_address(0));
+    RMMgr_saveAssertCaller(assert_caller);
+    log_blocking_fn(1,"hw fail assert from [%8x] see APP.elf.lst", assert_caller);
+    // flash led
+    hal_gpio_init_out(LED_1, 1);
+    hal_gpio_init_out(LED_2, 0);
+    // if ebugging,  halt busy flashing leds
+    // else reboot
+    uint32_t et = TMMgr_getRelTimeMS();
+    while(1) {
+        int total = 0;
+        // busy wait - don't let OS do anything or run another task
+        for(int i=0; i<500000;i++) {
+            // do something to avoid being optimised out
+            total++;
+        }
+        hal_gpio_toggle(LED_1);        
+        hal_gpio_toggle(LED_2);        
+        // reboot after 30s
+        if ((TMMgr_getRelTimeMS()-et)>30000) {
+            RMMgr_reboot(RM_HW_ERR);
+        }
+    }
+}
+
 // This is the assert fn mapped to by OS_CRASH() in os_fault.h which is mapped by the system assert.h in mynewt
 void wassert_fn_cb(const char* file, int lnum, const char *func, const char *e) {
     wassert_fn(file, lnum);

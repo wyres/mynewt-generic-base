@@ -25,7 +25,7 @@ typedef struct gps_data {
     int32_t lat;
     int32_t lon;
     int32_t alt;
-    int32_t prec;      // recision in m. -1 means the fix is invalid
+    int32_t prec;      // precision in 0.1m. -1 means the fix is invalid
     uint32_t rxAt;      // timestamp in secs since boot of when this position was updated
     uint8_t nSats;      // number of satellites used for this fix
 } gps_data_t;
@@ -35,6 +35,8 @@ typedef void (*GPS_CB_FN_t)(GPS_EVENT_TYPE_t e);
 void gps_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect);
 
 void gps_setPowerMode(GPS_POWERMODE_t m);
+/* get just the latest precision */
+int32_t gps_getCurrentPrecision();
 bool gps_getData(gps_data_t* d);
 /* time in secs since boot of last time we got a good gps fix. 0 if never had one. */
 uint32_t gps_lastGPSFixTimeSecs();

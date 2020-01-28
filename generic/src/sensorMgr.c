@@ -115,7 +115,8 @@ void SRMgr_init(void)
     if (ALTI_init() != ALTI_SUCCESS)
     {
         log_warn("SM:Alti_init fail");
-        // TODO set hw err flags to know about this
+        // badness we stop here
+        wassert_hw_fault();
     }
 
     // Register for to set desired low power mode. No need for callback to change setup

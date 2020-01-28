@@ -11,7 +11,6 @@
  * language governing permissions and limitations under the License.
 */
 
-
 #include "os/os.h"
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/wskt_user.h"
@@ -22,6 +21,7 @@
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/minmea.h"
 #include "wyres-generic/sm_exec.h"
+
 
 // Enable/disable detailed debug log stuff
 //#define DEBUG_GPS 1
@@ -321,6 +321,9 @@ static const SM_STATE_t _mySM[MS_LAST] = {
 
 // Called from appinit or app core module
 void gps_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect) {
+#ifdef UNITTEST
+    unittest_gps();
+#endif
     // _ctx data set to all 0 at startup by definition. Init non-0 explicit defaults here
     _ctx.powerMode = POWER_ONOFF;
     _ctx.gpsData.prec = -1;
@@ -356,6 +359,13 @@ void gps_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t ua
 
 void gps_setPowerMode(GPS_POWERMODE_t m) {
     _ctx.powerMode = m;
+}
+/* get just the latest precision */
+int32_t gps_getCurrentPrecision() {
+    if (_ctx.gpsData.rxAt>0) {
+        return _ctx.gpsData.prec;
+    }
+    return -1;
 }
 
 bool gps_getData(gps_data_t* d) {
@@ -471,7 +481,19 @@ static void gps_mgr_rxcb(struct os_event* ev) {
     }
     // and done
 }
-
+// Take a nimnema number as value/scale and return as a int multiplied by the requested number of decimal places
+static int32_t rescale(struct minmea_float* v, int newscale) {
+    if (newscale==v->scale) {
+        return v->value;
+    }
+    if (newscale > v->scale) {
+        // Want more DPs, so multiple by the scale difference
+        return (v->value * (newscale/v->scale));
+    } else {
+        // Want less DPs, so divide by the scale difference
+        return (v->value / (v->scale/newscale));
+    }
+}
 // Returns true if parsed ok, false if unparseable.
 // sets the 'prec' to 0 if no location data extracted
 static bool parseNEMA(const char* line, gps_data_t* nd) {
@@ -485,15 +507,24 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
             struct minmea_sentence_gga ggadata;
             if (minmea_parse_gga(&ggadata, line)) {
                 if (ggadata.fix_quality>0) {
-                    nd->lat = ggadata.latitude.value;
-                    nd->lon = ggadata.longitude.value;
-                    nd->alt = ggadata.altitude.value;
+                    // Get lat/lon values as decimals * 10000 (as format id DDmm.mmmmm and we pass it up as DDmmmmmmm)
+                    nd->lat = rescale(&ggadata.latitude, 10000);
+                    nd->lon = rescale(&ggadata.longitude, 10000);
+                    // altitude as value*10 
+                    nd->alt = rescale(&ggadata.altitude, 10);
                     nd->nSats = ggadata.satellites_tracked;
-                    nd->prec = ggadata.hdop.value*2; // precision diameter for 95% is 50% *2? 
-                    if (nd->prec < 1) {
-                        nd->prec = 5;
+                    // precision is 'best precision' * HDOP 
+                    // assume best precision is 5m for us, and calculate to nearest m with 1DP (ie *10)
+                    // use hdop to 1 DP (ie already *10 value)
+                    nd->prec = (rescale(&ggadata.hdop,10) * 5); 
+                    if (nd->prec < 30) {
+                        nd->prec = 30;  // ie 3.0m
                     }
-                    log_debug("GPS:gga fix %d", ggadata.satellites_tracked);
+                    log_debug("GPS:gga fix lat %d(%d/%d), lon %d(%d/%d) alt %d(%d/%d) prec %d(%d/%d)", 
+                        nd->lat, ggadata.latitude.value, ggadata.latitude.scale,
+                        nd->lon, ggadata.longitude.value, ggadata.longitude.scale,
+                        nd->alt, ggadata.altitude.value, ggadata.altitude.scale,
+                        nd->prec, ggadata.hdop.value, ggadata.hdop.scale);
                 } else {
                     log_debug("GPS:gga no fix %d", ggadata.satellites_tracked);
                 }

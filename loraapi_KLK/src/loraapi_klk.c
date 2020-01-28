@@ -714,6 +714,7 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, bool enabl
         log_debug("radio check says its good");
     } else {
         log_warn("radio check fails for spi0...");
+        wassert_hw_fault();
     }
     */
 
