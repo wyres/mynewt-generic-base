@@ -234,7 +234,7 @@ uint32_t SRMgr_getLastButtonReleaseTS()
 bool SRMgr_hasTempChanged() 
 {
     readEnv();      // ensure uptodate
-    return (delta(_ctx.currTempdC, _ctx.lastTempdC)>2);
+    return (delta(_ctx.currTempdC, _ctx.lastTempdC)>5);
 }
 int16_t SRMgr_getTempdC() 
 {
@@ -264,7 +264,7 @@ uint16_t SRMgr_getBatterymV()
 bool SRMgr_hasLightChanged() 
 {
     readEnv();      // ensure uptodate
-    return (delta(_ctx.currLight, _ctx.lastLight)>2);
+    return (delta(_ctx.currLight, _ctx.lastLight)>10);
 }
 uint8_t SRMgr_getLight() 
 {
@@ -309,41 +309,41 @@ uint16_t SRMgr_getADC2mV()
 }
 // Any value that has changed 'significantly' has the last value updated to the current 
 // app layer can decide to do this after having read and sent values that had changed
-bool SRMgr_updateEnvs() 
+bool SRMgr_updateEnvs(bool forceChange) 
 {
     bool changed = false;
     // only update those that have changed (otherwise slowly changing values will never be seen as changed)
-    if (SRMgr_hasBattChanged()) 
+    if (forceChange || SRMgr_hasBattChanged()) 
     {
         _ctx.lastBattmV = _ctx.currBattmV;
         changed = true;
     }
-    if (SRMgr_hasLightChanged()) 
+    if (forceChange || SRMgr_hasLightChanged()) 
     {
         _ctx.lastLight = _ctx.currLight;
         changed = true;
     }
-    if (SRMgr_hasTempChanged()) 
+    if (forceChange || SRMgr_hasTempChanged()) 
     {
         _ctx.lastTempdC = _ctx.currTempdC;
         changed = true;
     }
-    if (SRMgr_hasPressureChanged()) 
+    if (forceChange || SRMgr_hasPressureChanged()) 
     {
         _ctx.lastPressurePa = _ctx.currPressurePa;
         changed = true;
     }
-    if (SRMgr_hasADC1Changed()) 
+    if (forceChange || SRMgr_hasADC1Changed()) 
     {
         _ctx.lastADC1mV = _ctx.currADC1mV;
         changed = true;
     }
-    if (SRMgr_hasADC2Changed()) 
+    if (forceChange || SRMgr_hasADC2Changed()) 
     {
         _ctx.lastADC2mV = _ctx.currADC2mV;
         changed = true;
     }
-    if (SRMgr_hasButtonChanged()) 
+    if (forceChange || SRMgr_hasButtonChanged()) 
     {
         _ctx.lastButtonState = _ctx.currButtonState;
         changed = true;
