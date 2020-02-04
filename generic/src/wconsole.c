@@ -80,7 +80,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             return MS_STARTING_COMM;
         }
         default: {
-            log_debug("CN:? %d in Idle", e);
+            sm_default_event_log(ctx->mySMId, "CN", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -161,7 +161,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
         }
 
         default: {
-            log_debug("CN:? %d in StartingComm", e);
+            sm_default_event_log(ctx->mySMId, "CN", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -206,7 +206,7 @@ static SM_STATE_ID_t State_Active(void* arg, int e, void* data) {
         }
 
         default: {
-            log_debug("CN:? %d in Active", e);
+            sm_default_event_log(ctx->mySMId, "CN", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -236,7 +236,7 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
             // ignore we're already stopping
         }
         default: {
-            log_debug("CN:? %d in StoppingComm", e);
+            sm_default_event_log(ctx->mySMId, "CN", e);
             return SM_STATE_CURRENT;
         }
     }

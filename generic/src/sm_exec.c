@@ -200,6 +200,11 @@ SM_STATE_ID_t sm_getCurrentState(SM_ID_t id) {
     return sm->currentState->id;
 }
 
+/** default log for unhandled event in a state to make debugging easier and centralised */
+void sm_default_event_log(SM_ID_t id, const char* log, int e) {
+    log_debug("SM:%s:[%s] ignored %d", log, ((SM_t*)id)->currentState->name, e);
+}
+
 // Callouts
 static void sm_timer_cb(struct os_event* e) {
     sm_sendEvent((SM_ID_t)(e->ev_arg), SM_TIMEOUT, NULL);

@@ -118,7 +118,7 @@ static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
         }
 
         default: {
-            log_debug("BLE:? %d in Off", e);
+            sm_default_event_log(ctx->mySMId, "BLE", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -208,7 +208,7 @@ static SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
             return MS_BLE_OFF;
         }            
         default: {
-            log_debug("BLE:? %d in WaitPowerOn", e);
+            sm_default_event_log(ctx->mySMId, "BLE", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -261,7 +261,7 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             return MS_BLE_OFF;
         }            
         default: {
-            log_debug("BLE:? %d in Starting", e);
+            sm_default_event_log(ctx->mySMId, "BLE", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -306,7 +306,7 @@ static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
             return MS_BLE_IBEACON;
         }
         default: {
-            log_debug("BLE:? %d in On", e);
+            sm_default_event_log(ctx->mySMId, "BLE", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -339,7 +339,7 @@ static SM_STATE_ID_t State_WaitTypeSetScanner(void* arg, int e, void* data) {
             return MS_BLE_OFF;
         }            
         default: {
-            log_debug("BLE:? %d in WaitTypeSetScanner", e);
+            sm_default_event_log(ctx->mySMId, "BLE", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -372,7 +372,7 @@ static SM_STATE_ID_t State_WaitTypeSetIBeacon(void* arg, int e, void* data) {
             return MS_BLE_OFF;
         }            
         default: {
-            log_debug("BLE:? %d in WaitTypeSetIBeacon", e);
+            sm_default_event_log(ctx->mySMId, "BLE", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -450,7 +450,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         default: {
-            log_debug("BLE:? %d in Scaning", e);
+            sm_default_event_log(ctx->mySMId, "BLE", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -487,7 +487,7 @@ static SM_STATE_ID_t State_IBeacon(void* arg, int e, void* data) {
         }            
 
         default: {
-            log_debug("BLE:? %d in ibeaconning", e);
+            sm_default_event_log(ctx->mySMId, "BLE", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -521,7 +521,7 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
             return MS_BLE_ON;
         }
         default: {
-            log_debug("BLE:? %d in StoppingComm", e);
+            sm_default_event_log(ctx->mySMId, "BLE", e);
             return SM_STATE_CURRENT;
         }
     }
