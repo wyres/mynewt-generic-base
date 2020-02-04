@@ -63,7 +63,7 @@ bool SRMgr_hasBattChanged();
 bool SRMgr_hasLightChanged();
 bool SRMgr_hasADC1Changed();
 bool SRMgr_hasADC2Changed();
-bool SRMgr_updateEnvs();
+bool SRMgr_updateEnvs(bool forceChange);
 
 #ifdef __cplusplus
 }
