@@ -2444,8 +2444,9 @@ static LPS22HB_Error_et LPS22HB_Init(void)
     return LPS22HB_ERROR;
   }
 
- pLPS22HBInit.PowerMode=LPS22HB_LowNoise;
- pLPS22HBInit.OutputDataRate=LPS22HB_ODR_75HZ;
+// initialise in low power mode
+ pLPS22HBInit.PowerMode=LPS22HB_LowPower;    //LPS22HB_LowNoise;
+ pLPS22HBInit.OutputDataRate=LPS22HB_ODR_ONE_SHOT;
  pLPS22HBInit.LowPassFilter=LPS22HB_DISABLE;
  pLPS22HBInit.LPF_Cutoff=LPS22HB_ODR_20;
  pLPS22HBInit.BDU=LPS22HB_BDU_CONTINUOUS_UPDATE;
@@ -2912,7 +2913,7 @@ ALTI_Error_t ALTI_activate(void)
 ALTI_Error_t ALTI_sleep(void)
 {
     //Set ODR to one shot mode to prevent wakeup from sleep
-    if (LPS22HB_Set_Odr(LPS22HB_ODR_75HZ) != LPS22HB_OK)
+    if (LPS22HB_Set_Odr(LPS22HB_ODR_ONE_SHOT) != LPS22HB_OK)
     {
       return ALTI_ERROR;
     }

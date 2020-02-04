@@ -287,7 +287,7 @@ ACC_Error_t ACC_init() {
         return ACC_ERROR;
     }
 
-    data = 0x00;
+    data = 0x00;        // continuous update, full scale +/-2g, self test disabled, SPI 4 wire
     if(LIS2DE12_WriteReg(LIS2DE_CTRL_REG4, data) != LIS2DE12_OK)
     {
         return ACC_ERROR;
