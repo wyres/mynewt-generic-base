@@ -388,7 +388,7 @@ ACC_Error_t ACC_HasDetectedMoved(bool *hasDetectedMove)
         return ACC_ERROR;
     }
     // read of reg clears it
-    //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
+    //If IA register of INT1_SRC is SET, means that one or more detection events have occured since last check
     if ((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
     {
         *hasDetectedMove = true;
@@ -410,7 +410,7 @@ ACC_Error_t ACC_HasDetectedFreeFallOrShock(bool *hasDetectedMove)
         return ACC_ERROR;
     }
     // read of reg clears it
-    //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
+    //If IA register of INT2_SRC is SET, means that one or more detection events have occured since last check
     if((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
     {
         *hasDetectedMove = true;
