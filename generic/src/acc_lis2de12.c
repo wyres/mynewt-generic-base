@@ -347,7 +347,7 @@ ACC_Error_t ACC_activate() {
 
 ACC_Error_t ACC_sleep() {
     //Leave XYZ enabled, 10Hz frequency
-    if (LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK)) != LIS2DE12_OK)
+    if (LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_ONE_HZ_MASK)) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }

@@ -44,6 +44,7 @@ static struct {
     int8_t y;
     int8_t z;
     bool active;                        // is the accelero hw activated?
+    ACC_DetectionMode_t detectionMode;
     uint32_t lastMoveTimeS;
     uint32_t lastFallTimeS;
     uint32_t lastShockTimeS;
@@ -56,15 +57,14 @@ static struct {
 void movement_init(void) 
 {
     //Accelero config
-    ACC_DetectionMode_t detectionMode = ACC_DetectionOff;
     uint8_t threshold = 0;
     uint8_t duration = 0;
     // clear context
     memset(&_ctx, 0, sizeof(_ctx));
     _ctx.orientation = UNKNOWN;
     //Retrieve config for accelero from EEPROM
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_ACCELERO_DETECTION_MODE, &detectionMode, sizeof(ACC_DetectionMode_t));
-    switch(detectionMode)
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_ACCELERO_DETECTION_MODE, &_ctx.detectionMode, sizeof(ACC_DetectionMode_t));
+    switch(_ctx.detectionMode)
     {
         case ACC_FreeFallDetection:
         {
@@ -95,7 +95,7 @@ void movement_init(void)
         log_noout("accelero hw init fails");
         wassert_hw_fault();
     }
-    if (ACC_setDetectionMode(detectionMode, threshold, duration) != ACC_SUCCESS)
+    if (ACC_setDetectionMode(_ctx.detectionMode, threshold, duration) != ACC_SUCCESS)
     {
         log_noout("accelero detection configuration fails");
         wassert_hw_fault();
@@ -158,7 +158,6 @@ bool MMMgr_check()
     bool ret = true;
     bool hasDetected = false;
     // NOTE : we check the hw independantly of the active/sleep status of the device, as 'sleep' should not prevent responses
-    log_debug("mm:check");
     if (ACC_HasDetectedMoved(&hasDetected) == ACC_SUCCESS) 
     {
         if (hasDetected)
@@ -166,6 +165,8 @@ bool MMMgr_check()
             _ctx.movedSinceLastCheck = true;
             _ctx.lastMoveTimeS = TMMgr_getRelTimeSecs();
             log_debug("mm:MOVED");
+        } else {
+            log_debug("mm:NOT MOVED");
         }
     }
     else
@@ -178,8 +179,13 @@ bool MMMgr_check()
     {
         if (hasDetected)
         {
-            _ctx.lastFallTimeS = TMMgr_getRelTimeSecs();
-            log_debug("mm:FALLEN");
+            if (_ctx.detectionMode==ACC_FreeFallDetection) {
+                _ctx.lastFallTimeS = TMMgr_getRelTimeSecs();
+                log_debug("mm:FALLEN");
+            } else {
+                _ctx.lastShockTimeS = TMMgr_getRelTimeSecs();
+                log_debug("mm:SHOCK");
+            }
         }
     }
     else
@@ -190,13 +196,13 @@ bool MMMgr_check()
 
     if (ACC_readXYZ(&_ctx.x, &_ctx.y, &_ctx.z) == ACC_SUCCESS)
     {
-        log_debug("x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
+//        log_debug("x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
     }
     else
     {
         log_warn("mm: failed read xyz");
         ret = false;
-    }  
+    }
     // check if event means call callbacks 
     checkMoved();
     checkOrientationChange();
@@ -244,6 +250,8 @@ void MMMgr_getXYZ(int8_t* xp, int8_t* yp, int8_t* zp) {
     *xp = _ctx.x;
     *yp = _ctx.y;
     *zp = _ctx.z;
+    log_debug("mm:x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
+
 }
 
 
