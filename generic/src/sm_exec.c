@@ -230,7 +230,7 @@ static void sm_nextevent_cb(struct os_event* e) {
             SM_STATE_ID_t nextState = (sm->currentState->fn)(sm->ctxarg, evt->e, evt->data);
             // Check if change of state
             if (nextState!=SM_STATE_CURRENT) {
-                // ensure timer is stopped before entering next state
+                // ensure timer is stopped before entering next state, and remove any timeout events from q
                 sm_timer_stop(sm);
                 const SM_STATE_t* next = findStateFromId(nextState, sm->sm_table, sm->sz);
                 if (next==NULL) {

@@ -146,15 +146,6 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
                 return SM_STATE_CURRENT;
             }
 
-            if (ctx->powerMode==POWER_ONSTANDBY) {
-                // wake it up and help it to know how to progress
-                wskt_write(ctx->cnx, (uint8_t*)EASY_ON, strlen(EASY_ON));
-                if (gps_lastGPSFixAgeMins() < 0 || gps_lastGPSFixAgeMins() > MAX_EPHEMERAL_DATA_TIME_MINS) {
-                    wskt_write(ctx->cnx, (uint8_t*)COLD_START, strlen(COLD_START));
-                } else {
-                    wskt_write(ctx->cnx, (uint8_t*)HOT_START, strlen(HOT_START));
-                }
-            }
             // start timeout for comm check - initial timer for 5s to at least get connection up
             sm_timer_start(ctx->mySMId, 5000);
 
@@ -207,6 +198,16 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
             cmd.cmd = IOCTL_SELECTUART;
             cmd.param = ctx->uartSelect;
             wskt_ioctl(ctx->cnx, &cmd);
+            // Uart ready for us, wake up GPS if its on standby
+            if (ctx->powerMode==POWER_ONSTANDBY) {
+                // wake it up and help it to know how to progress
+                wskt_write(ctx->cnx, (uint8_t*)EASY_ON, strlen(EASY_ON));
+                if (gps_lastGPSFixAgeMins() < 0 || gps_lastGPSFixAgeMins() > MAX_EPHEMERAL_DATA_TIME_MINS) {
+                    wskt_write(ctx->cnx, (uint8_t*)COLD_START, strlen(COLD_START));
+                } else {
+                    wskt_write(ctx->cnx, (uint8_t*)HOT_START, strlen(HOT_START));
+                }
+            }
             return SM_STATE_CURRENT;
         }
 
