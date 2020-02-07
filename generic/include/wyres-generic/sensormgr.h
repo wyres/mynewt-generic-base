@@ -43,7 +43,7 @@ bool SRMgr_registerNoiseCB(SR_NOISE_CBFN_t cb, void* ctx);
 // Remove registration - if noone is registered then micro input only checked at UL time..
 void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb);
 
-int16_t SRMgr_getTempdC();
+int16_t SRMgr_getTempcC();
 int32_t SRMgr_getPressurePa();
 uint16_t SRMgr_getBatterymV();
 uint8_t SRMgr_getLight();

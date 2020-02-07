@@ -67,11 +67,11 @@ static struct {
     uint8_t lastButtonState;
     uint8_t lastButtonPressType;
     bool isActive;
-    int16_t currTempdC;
+    int16_t currTempcC;
     uint16_t currBattmV;
     int32_t currPressurePa;
     uint8_t currLight;
-    int16_t lastTempdC;
+    int16_t lastTempcC;
     uint16_t lastBattmV;
     uint32_t lastPressurePa;
     uint8_t lastLight;
@@ -234,17 +234,17 @@ uint32_t SRMgr_getLastButtonReleaseTS()
 bool SRMgr_hasTempChanged() 
 {
     readEnv();      // ensure uptodate
-    return (delta(_ctx.currTempdC, _ctx.lastTempdC)>5);
+    return (delta(_ctx.currTempcC, _ctx.lastTempcC)>50);
 }
-int16_t SRMgr_getTempdC() 
+int16_t SRMgr_getTempcC() 
 {
     readEnv();
-    return _ctx.currTempdC;        // value in 1/10 C
+    return _ctx.currTempcC;        // value in 1/100 C
 }
 void SRMgr_updateTemp() 
 {
     readEnv();
-    _ctx.lastTempdC = _ctx.currTempdC;
+    _ctx.lastTempcC = _ctx.currTempcC;
 }
 
 bool SRMgr_hasPressureChanged() 
@@ -494,7 +494,7 @@ static void readEnv()
         {
             _ctx.currADC2mV = GPIO_readADC(GPIO_ADC2);
         }
-        if (ALTI_readAllData(&_ctx.currPressurePa, &_ctx.currTempdC) != ALTI_SUCCESS)
+        if (ALTI_readAllData(&_ctx.currPressurePa, &_ctx.currTempcC) != ALTI_SUCCESS)
         {
             log_warn("SM:Err read alti");
         } else {
