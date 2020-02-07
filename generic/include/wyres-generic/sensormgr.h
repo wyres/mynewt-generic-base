@@ -43,8 +43,6 @@ bool SRMgr_registerNoiseCB(SR_NOISE_CBFN_t cb, void* ctx);
 // Remove registration - if noone is registered then micro input only checked at UL time..
 void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb);
 
-// When did temp, pressure, battery, light last change 'significantly'? In seconds since boot.
-uint32_t SRMgr_getLastEnvChangeTimeSecs();
 int16_t SRMgr_getTempdC();
 int32_t SRMgr_getPressurePa();
 uint16_t SRMgr_getBatterymV();
@@ -63,8 +61,14 @@ bool SRMgr_hasBattChanged();
 bool SRMgr_hasLightChanged();
 bool SRMgr_hasADC1Changed();
 bool SRMgr_hasADC2Changed();
-bool SRMgr_updateEnvs(bool forceChange);
-
+// signal can update the 'last' value as used the new value
+void SRMgr_updateTemp();
+void SRMgr_updatePressure();
+void SRMgr_updateBatt();
+void SRMgr_updateLight();
+void SRMgr_updateADC1();
+void SRMgr_updateADC2();
+void SRMgr_updateButton();
 #ifdef __cplusplus
 }
 #endif

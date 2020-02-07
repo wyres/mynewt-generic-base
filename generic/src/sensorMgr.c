@@ -61,7 +61,6 @@ static struct {
         void* ctx;
     } noiseCBs[MAX_CBS];
     uint32_t lastReadTS;                // in seconds since boot
-    uint32_t lastSignificantChangeTS;   // in seconds since boot
     uint32_t lastButtonPressTS;         // in ms since boot
     uint32_t lastButtonReleaseTS;       // in ms since boot
     uint8_t currButtonState;
@@ -206,10 +205,6 @@ void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb)
     }
 }
 
-uint32_t SRMgr_getLastEnvChangeTimeSecs() 
-{
-    return _ctx.lastSignificantChangeTS;
-}
 bool SRMgr_hasButtonChanged() 
 {
     return (_ctx.currButtonState != _ctx.lastButtonState);
@@ -218,6 +213,11 @@ uint8_t SRMgr_getButton()
 {
     readEnv();
     return _ctx.currButtonState;
+}
+void SRMgr_updateButton() 
+{
+    readEnv();
+    _ctx.lastButtonState = _ctx.currButtonState;
 }
 uint8_t SRMgr_getLastButtonPressType() 
 {
@@ -241,6 +241,12 @@ int16_t SRMgr_getTempdC()
     readEnv();
     return _ctx.currTempdC;        // value in 1/10 C
 }
+void SRMgr_updateTemp() 
+{
+    readEnv();
+    _ctx.lastTempdC = _ctx.currTempdC;
+}
+
 bool SRMgr_hasPressureChanged() 
 {
     readEnv();      // ensure uptodate
@@ -251,6 +257,12 @@ int32_t SRMgr_getPressurePa()
     readEnv();
     return _ctx.currPressurePa;       // in Pa
 }
+void SRMgr_updatePressure() 
+{
+    readEnv();
+    _ctx.lastPressurePa = _ctx.currPressurePa;
+}
+
 bool SRMgr_hasBattChanged() 
 {
     readEnv();      // ensure uptodate
@@ -261,6 +273,12 @@ uint16_t SRMgr_getBatterymV()
     readEnv();
     return _ctx.currBattmV;         // in mV
 }
+void SRMgr_updateBatt() 
+{
+    readEnv();
+    _ctx.lastBattmV = _ctx.currBattmV;
+}
+
 bool SRMgr_hasLightChanged() 
 {
     readEnv();      // ensure uptodate
@@ -271,6 +289,12 @@ uint8_t SRMgr_getLight()
     readEnv();
     return _ctx.currLight;
 }
+void SRMgr_updateLight() 
+{
+    readEnv();
+    _ctx.lastLight = _ctx.currLight;
+}
+
 uint32_t SRMgr_getLastNoiseTimeSecs() 
 {
     readEnv();      // ensure uptodate
@@ -297,6 +321,11 @@ uint16_t SRMgr_getADC1mV()
     readEnv();
     return _ctx.currADC1mV;
 }
+void SRMgr_updateADC1() 
+{
+    readEnv();
+    _ctx.lastADC1mV = _ctx.currADC1mV;
+}
 bool SRMgr_hasADC2Changed() 
 {
     readEnv();      // ensure uptodate
@@ -307,53 +336,12 @@ uint16_t SRMgr_getADC2mV()
     readEnv();
     return _ctx.currADC2mV;
 }
-// Any value that has changed 'significantly' has the last value updated to the current 
-// app layer can decide to do this after having read and sent values that had changed
-bool SRMgr_updateEnvs(bool forceChange) 
+void SRMgr_updateADC2() 
 {
-    bool changed = false;
-    // only update those that have changed (otherwise slowly changing values will never be seen as changed)
-    if (forceChange || SRMgr_hasBattChanged()) 
-    {
-        _ctx.lastBattmV = _ctx.currBattmV;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasLightChanged()) 
-    {
-        _ctx.lastLight = _ctx.currLight;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasTempChanged()) 
-    {
-        _ctx.lastTempdC = _ctx.currTempdC;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasPressureChanged()) 
-    {
-        _ctx.lastPressurePa = _ctx.currPressurePa;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasADC1Changed()) 
-    {
-        _ctx.lastADC1mV = _ctx.currADC1mV;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasADC2Changed()) 
-    {
-        _ctx.lastADC2mV = _ctx.currADC2mV;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasButtonChanged()) 
-    {
-        _ctx.lastButtonState = _ctx.currButtonState;
-        changed = true;
-    }
-    if (changed) 
-    {
-        _ctx.lastSignificantChangeTS = TMMgr_getRelTimeSecs();
-    }
-    return changed;
+    readEnv();
+    _ctx.lastADC2mV = _ctx.currADC2mV;
 }
+
 // internals
 static SR_BUTTON_PRESS_TYPE_t calcButtonPressType(uint32_t durms) 
 {
