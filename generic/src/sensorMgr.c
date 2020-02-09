@@ -92,9 +92,9 @@ static struct {
 #define I2C_ACCESS_TIMEOUT (100)
 
 static void buttonCB(void* arg);
-static void config();
+static bool config();
     // read stuff into current values
-static void readEnv();
+static bool readEnv();
 static void deconfig();
 static uint32_t delta(int a, int b);
 static void buttonCheckDebounced(struct os_event* e);
@@ -125,14 +125,16 @@ void SRMgr_init(void)
 
 }
 
-void SRMgr_start() 
+bool SRMgr_start() 
 {
+    bool ret = true;
     // While active sensing dont turn off periphs please
     LPMgr_setLPMode(_ctx.lpUserId, LP_DOZE);
     // configure GPIOs / I2C for periphs
-    config();
+    ret &= config();
     // read stuff into current values
     readEnv();
+    return ret;
 }
 
 void SRMgr_stop() 
@@ -407,7 +409,7 @@ static void buttonCheckDebounced(struct os_event* e)
         }
     } // else it toggled but settled into same state as before -> no transition
 }
-static void config() 
+static bool config() 
 {
     if (!_ctx.isActive) {
         _ctx.isActive = true;
@@ -436,17 +438,20 @@ static void config()
         if (ALTI_activate() != ALTI_SUCCESS)
         {
             log_warn("SM:Erractivate alti");
+            return false;
         }
 
         // config noise detector on micro
         // TODO
     }
+    return true;
 }
 
 
 // read stuff into current values
-static void readEnv() 
+static bool readEnv() 
 {
+    bool ret=true;
     if (_ctx.isActive) 
     {
         _ctx.lastReadTS = TMMgr_getRelTimeSecs();
@@ -497,11 +502,13 @@ static void readEnv()
         if (ALTI_readAllData(&_ctx.currPressurePa, &_ctx.currTempcC) != ALTI_SUCCESS)
         {
             log_warn("SM:Err read alti");
+            ret = false;
         } else {
             //            log_debug("SM:temp %d", _ctx.currTempdC);
             //            log_debug("SM:press %d", _ctx.currPressurePa);
         }
     }
+    return ret;
 }
 
 

@@ -26,7 +26,10 @@ typedef void (*SR_BUTTON_CBFN_t)(void* ctx, SR_BUTTON_STATE_t currentState, SR_B
 
 typedef void (*SR_NOISE_CBFN_t)(void* ctx, int noiseFreq, int noiseDBm);
 
-void SRMgr_start();
+/** 
+ * startup sensors ready for reading. Returns true if all ok, false if hw issue
+ */
+bool SRMgr_start();
 void SRMgr_stop();
 
 uint32_t SRMgr_getLastButtonTimeSecs();
