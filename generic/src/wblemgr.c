@@ -36,7 +36,9 @@ static char* BLE_CHECK="AT+WHO\r\n";
 //static char* BLE_RXMODE="AT+POLL\r\n";
 // Latest version of BLE scanner using push mode works best for large numbers of BLE devices scanned...
 static char* BLE_RXMODE="AT+PUSH\r\n";
-static char* BLE_SCAN_START="AT+START\r\n";
+
+static char BLE_SCAN_START[50]; //AT+START,UUID\r\n\0, need to be sufficient    
+
 static char* BLE_SCAN_STOP="AT+STOP\r\n";
 
 static char* BLE_TYPE_SCANNER="AT+TYPE=1\r\n";  
@@ -45,6 +47,8 @@ static char* BLE_TYPE_IBEACON="AT+TYPE=3\r\n";
 // NOTE: Ids aligned as of version 6 of BLE scannner code
 #define TYPE_SCANNER    (1)
 #define TYPE_IBEACON    (3)
+
+#define UUID_SZ (16)
 
 //static os_stack_t _wble_task_stack[WBLE_TASK_STACK_SZ];
 //static struct os_task wble_mgr_task_str;
@@ -385,12 +389,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             // rx data mode
             wskt_write(ctx->cnx, (uint8_t*)BLE_RXMODE, strlen(BLE_RXMODE));
             // And start the scanning
-            if (ctx->uuid!=NULL) {
-                // TODO start srting is ",UUID"
-                wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_START, strlen(BLE_SCAN_START));
-            } else {
-                wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_START, strlen(BLE_SCAN_START));
-            }
+            wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_START, strlen(BLE_SCAN_START));
             // remind every second
             sm_timer_start(ctx->mySMId, 1000);
             log_info("BLE:scanning[%d->%d]", ctx->majorStart, ctx->majorEnd);
@@ -588,7 +587,17 @@ void wble_scan_start(void* c, const uint8_t* uuid, uint16_t majorStart, uint16_t
     assert(c!=NULL);
     assert(list!=NULL);
     struct blectx* ctx = (struct blectx*)c;
-    memcpy(ctx->uuid, uuid, sizeof(_ctx.uuid));
+
+    if(uuid!=NULL && Util_notAll0(uuid,UUID_SZ)==true){
+        sprintf(BLE_SCAN_START,"AT+START,%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n"
+         ,uuid[0],uuid[1],uuid[2],uuid[3],uuid[4],uuid[5],uuid[6],uuid[7],uuid[8],uuid[9],uuid[10],uuid[11],uuid[12],uuid[13],
+          uuid[14],uuid[15]);    
+    }else{
+        sprintf(BLE_SCAN_START,"AT+START\r\n");
+    }
+
+    log_debug(BLE_SCAN_START); 
+
     ctx->majorStart = majorStart;
     ctx->majorEnd = majorEnd;
     ctx->ibListSz = sz;
