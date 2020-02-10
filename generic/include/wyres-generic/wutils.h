@@ -119,6 +119,11 @@ uint32_t Util_readLE_uint32_t(uint8_t* b, uint8_t l);
  */
 uint32_t Util_hashstrn(const char* s, int maxlen);
 
+/*
+ Return true if data block is not just 0's, false if it is
+*/
+bool Util_notAll0(const uint8_t *p, uint8_t sz);
+
 // Unittest support
 #if MYNEWT_VAL(UNITTEST) 
 #define UNITTEST (1)
