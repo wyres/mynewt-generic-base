@@ -114,6 +114,10 @@ uint16_t Util_readLE_uint16_t(uint8_t* b, uint8_t l);
  * helper to read 32 bit LE from buffer (may be 0 stripped)
  */
 uint32_t Util_readLE_uint32_t(uint8_t* b, uint8_t l);
+/*
+ * Calculate simple hash from string input
+ */
+uint32_t Util_hashstrn(const char* s, int maxlen);
 
 // Unittest support
 #if MYNEWT_VAL(UNITTEST) 

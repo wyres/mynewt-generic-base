@@ -410,3 +410,22 @@ uint16_t Util_readLE_uint16_t(uint8_t* b, uint8_t l) {
     }
     return ret;
 }
+
+/*
+ * Calculate simple hash from string input
+ */
+#define MULTIPLIER (37)
+uint32_t Util_hashstrn(const char* s, int maxlen) {
+    int i=0;
+    uint32_t h = 0;
+    /* cast s to unsigned const char * */
+    /* this ensures that elements of s will be treated as having values >= 0 */
+    unsigned const char *us = (unsigned const char *) s;
+
+    while(*us != '\0' && i<maxlen) {
+        h = h * MULTIPLIER + us[i];
+        i++;
+    } 
+
+    return h;
+}
