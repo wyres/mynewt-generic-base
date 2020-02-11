@@ -108,11 +108,14 @@ void reboot_init(void) {
     // Create task to tickle watchdog from default task
     os_task_init(&_watchdog_task_str, "watchdog", &watchdog_task, NULL, WATCHDOG_TASK_PRIO,
                  OS_WAIT_FOREVER, _watchdog_task_stack, WATCHDOG_TASK_STACK_SZ);
-
+    // deal with watchdog here if OS not doing to (interval at 0 means app responsible)
+#if MYNEWT_VAL(WATCHDOG_INTERVAL) == 0
+    // TODO replace with system level watchdog due to the 28s max timeout limit
     // init watchdog
     hal_watchdog_init(WATCHDOG_TIMEOUT_SECS*1000);       // 28s is the max...
     // and start it
     hal_watchdog_enable();       
+#endif
 }
 
 void RMMgr_reboot(uint8_t reason) {
