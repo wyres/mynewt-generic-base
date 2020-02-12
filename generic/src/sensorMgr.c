@@ -109,7 +109,7 @@ void SRMgr_init(void)
     if (EXT_BUTTON>=0)
     {
         // if ext button is enabled, its IRQ etc runs all the time even during deepsleep
-        GPIO_define_irq("button", EXT_BUTTON, buttonCB, &_ctx, HAL_GPIO_TRIG_BOTH, HAL_GPIO_PULL_UP, LP_DEEPSLEEP);
+        GPIO_define_irq("button", EXT_BUTTON, buttonCB, &_ctx, HAL_GPIO_TRIG_BOTH, HAL_GPIO_PULL_UP, LP_DEEPSLEEP, PULL_DOWN); //TODO : double check "PULL_DOWN"
     }
     // config alti on i2c
     if (ALTI_init() != ALTI_SUCCESS)
@@ -428,21 +428,21 @@ static void config()
         if (LIGHT_SENSOR>=0) 
         {
             // Must activate GPIO that provides power to it
-            GPIO_define_out("micropower", SENSOR_PWR, 1, LP_DOZE);
-            GPIO_define_adc("light", LIGHT_SENSOR, LIGHT_SENSOR_ADCCHAN, LP_DOZE);
+            GPIO_define_out("micropower", SENSOR_PWR, 1, LP_DOZE, OUT_0);
+            GPIO_define_adc("light", LIGHT_SENSOR, LIGHT_SENSOR_ADCCHAN, LP_DOZE, HIGH_Z);
     //        log_debug("SM light");
         }
         if (GPIO_ADC1>=0) 
         {
-            GPIO_define_adc("adc1", GPIO_ADC1, CHAN_ADC1, LP_DOZE);
+            GPIO_define_adc("adc1", GPIO_ADC1, CHAN_ADC1, LP_DOZE, HIGH_Z);
         }
         if (GPIO_ADC2>=0) 
         {
-            GPIO_define_adc("adc2", GPIO_ADC2, CHAN_ADC2, LP_DOZE);
+            GPIO_define_adc("adc2", GPIO_ADC2, CHAN_ADC2, LP_DOZE, HIGH_Z);
         }
         if (BATTERY_GPIO>=0) 
         {
-            GPIO_define_adc("battery", BATTERY_GPIO, BATTERY_ADCCHAN, LP_DOZE);
+            GPIO_define_adc("battery", BATTERY_GPIO, BATTERY_ADCCHAN, LP_DOZE, HIGH_Z); //TODO : double check "HIGH_Z"
     //        log_debug("SM:batt");
         }
         if (ALTI_activate() != ALTI_SUCCESS)

@@ -27,15 +27,16 @@ extern "C" {
 */
 #define GPIO_NAME_SZ    (7)
 typedef enum  { GPIO_OUT, GPIO_IN, GPIO_IRQ, GPIO_ADC } GPIO_TYPE;
+typedef enum  { HIGH_Z, PULL_UP, PULL_DOWN, OUT_1, OUT_0 } GPIO_IDLE_TYPE;
 
 /**
  *  gpio creation mirrors hal calls with extra info
  */
 // Define a gpio OUTPUT pin, with a name, an initial value, and the highest lowpower mode it should be active in
-void* GPIO_define_out(const char* name, int8_t pin, uint8_t initialvalue, LP_MODE_t offmode);
-void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MODE_t offmode);
-void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offmode);
-void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handler, void * arg, hal_gpio_irq_trig_t trig, hal_gpio_pull_t pull, LP_MODE_t offmode);
+void* GPIO_define_out(const char* name, int8_t pin, uint8_t initialvalue, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype);
+void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype);
+void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype);
+void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handler, void * arg, hal_gpio_irq_trig_t trig, hal_gpio_pull_t pull, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype);
 
 /** 
  * mirror calls for all other hal gpio functions, but that deal with low power operations

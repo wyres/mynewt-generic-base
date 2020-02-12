@@ -560,7 +560,7 @@ void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t 
     _ctx.pwrPin = pwrPin;
     if (_ctx.pwrPin>=0) {
         // Note 1 is OFF so start with it off
-        GPIO_define_out("blepower", _ctx.pwrPin, 1, LP_DEEPSLEEP);
+        GPIO_define_out("blepower", _ctx.pwrPin, 1, LP_DEEPSLEEP, PULL_UP);
     }
     // create event with arg pointing to our line buffer
     // TODO how to tell driver limit of size of buffer???

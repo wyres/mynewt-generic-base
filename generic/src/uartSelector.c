@@ -29,8 +29,8 @@ static void uart_selector_setup(int8_t gpio0, int8_t gpio1) {
     if (_gpio0<0 || _gpio1<0) {
         return;
     }
-    GPIO_define_out("US0", gpio0, 0, LP_DEEPSLEEP);
-    GPIO_define_out("US1", gpio1, 0, LP_DEEPSLEEP);
+    GPIO_define_out("US0", gpio0, 0, LP_DEEPSLEEP, PULL_DOWN);
+    GPIO_define_out("US1", gpio1, 0, LP_DEEPSLEEP, PULL_UP);
     // initialise in hiZ
     uart_select(MYNEWT_VAL(UART_SELECT_HIZ));
 }

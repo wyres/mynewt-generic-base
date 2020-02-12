@@ -24,9 +24,12 @@
 #include "bsp/bsp.h"
 
 #include "wyres-generic/wutils.h"
-
+#include <hal/hal_gpio.h>
+#include <stm32l1xx_hal_gpio.h>
 #include "wyres-generic/gpiomgr.h"
 #include "wyres-generic/lowpowermgr.h"
+
+int hal_gpio_init_stm(int pin, GPIO_InitTypeDef *cfg);
 
 #define MAX_GPIOS (MYNEWT_VAL(MAX_GPIOS))
 
@@ -37,6 +40,7 @@ typedef struct gpio {
     hal_gpio_irq_trig_t trig;
     hal_gpio_pull_t pull;
     LP_MODE_t lpmode;
+    GPIO_IDLE_TYPE lptype;
     GPIO_TYPE type;
     int adc_chan;
     int value;
@@ -73,7 +77,7 @@ void gpio_mgr_init(void) {
 }
 
 // Define a gpio OUTPUT pin, with a name, an initial value, and the highest lowpower mode it should be active in
-void* GPIO_define_out(const char* name, int8_t pin, uint8_t initialvalue, LP_MODE_t offmode) {
+void* GPIO_define_out(const char* name, int8_t pin, uint8_t initialvalue, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype) {
     // already setup?
     GPIO_t* p = allocGPIO(pin);
     if (p!=NULL) {
@@ -81,13 +85,14 @@ void* GPIO_define_out(const char* name, int8_t pin, uint8_t initialvalue, LP_MOD
         p->type = GPIO_OUT;
         p->value = (initialvalue!=0?1:0);
         p->lpmode = offmode;
+        p->lptype = offtype;
         p->lpEnabled = true;        // assume pin is alive in current lp mode!
         init_hal(p);
     }
     return p;
 }
 
-void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MODE_t offmode) {
+void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype) {
         // already setup?
     GPIO_t* p = allocGPIO(pin);
     if (p!=NULL) {
@@ -95,6 +100,7 @@ void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MOD
         p->type = GPIO_IN;
         p->pull = pull;
         p->lpmode = offmode;
+        p->lptype = offtype;
         p->lpEnabled = true;        // assume pin is alive in current lp mode!
         init_hal(p);
         p->value = hal_gpio_read(pin);
@@ -103,7 +109,7 @@ void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MOD
 
 }
 
-void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offmode) {
+void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype) {
     // already setup?
     GPIO_t* p = allocGPIO(pin);
     if (p!=NULL) {
@@ -111,6 +117,7 @@ void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offm
         strncpy(p->name, name, GPIO_NAME_SZ);
         p->type = GPIO_ADC;
         p->lpmode = offmode;
+        p->lptype = offtype;
         p->lpEnabled = true;        // assume pin is alive in current lp mode!
         p->adc_chan = adc_chan;
         init_hal(p);
@@ -119,7 +126,7 @@ void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offm
     return p;
 
 }
-void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handler, void * arg, hal_gpio_irq_trig_t trig, hal_gpio_pull_t pull, LP_MODE_t offmode) {
+void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handler, void * arg, hal_gpio_irq_trig_t trig, hal_gpio_pull_t pull, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype) {
     // already setup?
     GPIO_t* p = allocGPIO(pin);
     if (p!=NULL) {
@@ -131,6 +138,7 @@ void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handl
         p->pull = pull;
         p->trig = trig;
         p->lpmode = offmode;
+        p->lptype = offtype;
         p->lpEnabled = true;        // assume pin is alive in current lp mode!
         init_hal(p);
         p->value = hal_gpio_read(pin);
@@ -306,6 +314,12 @@ static void init_hal(GPIO_t* p) {
 }
 // deinit pin in hal (when no longer used or when entering low power)
 static void deinit_hal(GPIO_t* p) {
+
+    GPIO_InitTypeDef highz_cfg = {
+        .Mode = GPIO_MODE_ANALOG,
+        .Pull = GPIO_NOPULL
+    };
+
     // check it is currently active, noop if not
     if (p->lpEnabled) {
         // irq or adc pins require specific release actions first
@@ -319,8 +333,26 @@ static void deinit_hal(GPIO_t* p) {
             hal_bsp_adc_release(p->pin, p->adc_chan);
             checkForNoADC();
         }
-        // and deinit will set it to floating for lowest power use
+        // and deinit will set it as configured for lowest power use
         hal_gpio_deinit(p->pin);
+        if(p->lptype == PULL_DOWN){
+            hal_gpio_init_in(p->pin, HAL_GPIO_PULL_DOWN);
+        }else if(p->lptype == PULL_UP){
+            hal_gpio_init_in(p->pin, HAL_GPIO_PULL_UP);
+        }else if(p->lptype == OUT_0){
+            hal_gpio_init_out(p->pin, 0);
+        }else if(p->lptype == OUT_1){
+            hal_gpio_init_out(p->pin, 1);       
+        }else{
+            /*HIGH_Z mode :                                         */
+            /*analog input setup is recommmended for lowest power   */
+            /*consumptioin but actually not allowed by hal_gpio.c   */
+            /*-> Set it up in input no-pull mode                    */
+            highz_cfg.Pin = p->pin;
+            highz_cfg.Alternate = p->pin;
+            hal_gpio_init_stm(highz_cfg.Pin, &highz_cfg);
+            //hal_gpio_init_analog_input(p->pin);
+        }
     }
 }
 

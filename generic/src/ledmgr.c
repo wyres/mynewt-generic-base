@@ -176,7 +176,7 @@ static int checkLED(int8_t gpio) {
         _leds[r].cur.pattern = 0;
         _leds[r].next.pattern = 0;
         // Setup io : using IO mgr to deal with deep sleep entry/exit. 
-        GPIO_define_out("LED", gpio, 0, LP_DOZE);
+        GPIO_define_out("LED", gpio, 0, LP_DOZE, HIGH_Z);
         // Each entry has its own timer, where the arg in the event for the timer callback is the gpio value...
         os_callout_init(&(_leds[r].durTimer), os_eventq_dflt_get(),
                     &led_dur_ev_cb, (void*)(&_leds[r]));

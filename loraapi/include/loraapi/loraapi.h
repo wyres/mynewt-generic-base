@@ -29,6 +29,9 @@ typedef void (*LORAWAN_JOIN_CB_t)(void* userctx, LORAWAN_RESULT_t res);
 typedef void (*LORAWAN_TX_CB_t)(void* userctx, LORAWAN_RESULT_t res);
 typedef void (*LORAWAN_RX_CB_t)(void* userctx, LORAWAN_RESULT_t res, uint8_t port, int rssi, int snr, uint8_t* msg, uint8_t sz);
 
+// Deinit the api
+void lora_api_deinit(void);
+
 // Initialise the api usage. No other api call should be made before this is done (assert condition)
 void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, bool enableADR, LORAWAN_SF_t defaultSF, int8_t defaultTxPower);
 

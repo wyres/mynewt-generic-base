@@ -655,19 +655,44 @@ static void execRxRadio(struct os_event* e) {
     log_warn("LW:DRRX TBI");
 }
 
+
+//TODO : move this in board_utils.c
+extern void SX1272IoDeInit( void );
+extern void SX1272AntSwDeInit( void );
+
+extern void lorawan_init(void);
+
+void lorawan_deinit (void)
+{
+    SX1272IoDeInit();
+    SX1272AntSwDeInit();
+}
+
 // Callback from low power manager about change of mode - NO LOGS
 static void lp_change(LP_MODE_t prevmode, LP_MODE_t newmode) {
     // Radio is ON in all modes except DEEPSLEEP
     if (prevmode>=LP_DEEPSLEEP && newmode <LP_DEEPSLEEP) {
         // wake up radio - init its periphs
         // TODO find KLK api to do this?
-        // lorawan_init();         // in board_utils.c
+        lorawan_init();         // in board_utils.c
+                
     } else if (prevmode<LP_DEEPSLEEP && newmode >= LP_DEEPSLEEP) {
         // shutdown radio - reset its periphs, deinit spi etc
         // TODO
-        // lorawan_deinit();         // not yet in board_utils.c
+        lorawan_deinit();         // not yet in board_utils.c
     }
 }
+
+void lora_api_deinit(void) {
+
+    // TODO : be sure whole context is deinit 
+    // and semaphore or mutexes have been released
+
+    // deinit lower layer
+    lorawan_deinit();
+}
+
+
 
 // initialise lorawan stack with our config. Called by application before using stack.
 void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, bool enableADR, LORAWAN_SF_t defaultSF, int8_t defaultTxPower) {

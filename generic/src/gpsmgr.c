@@ -334,7 +334,7 @@ void gps_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t ua
     _ctx.pwrPin = pwrPin;
     if (_ctx.pwrPin>=0) {
         // Note 1 is OFF so start with it off
-        GPIO_define_out("gpspower", _ctx.pwrPin, 1, LP_DEEPSLEEP);
+        GPIO_define_out("gpspower", _ctx.pwrPin, 1, LP_DEEPSLEEP, PULL_UP);
     }
     // mutex for data access
     os_mutex_init(&_ctx.dataMutex);
