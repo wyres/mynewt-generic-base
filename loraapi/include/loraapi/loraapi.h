@@ -34,6 +34,12 @@ void lora_api_deinit(void);
 
 // Initialise the api usage. No other api call should be made before this is done (assert condition)
 void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, bool enableADR, LORAWAN_SF_t defaultSF, int8_t defaultTxPower);
+// Ask Lora stack if deep sleeping is possible?
+bool lora_api_canDeepSleep();
+// Ask LoRa stack to sleep its hardware in as low power as possible
+void lora_api_deepSleep();
+// Tell stack it can (if required) wake up its hw
+void lora_api_wake();
 
 // Is the lorawan layer 'joined' (ie a successful JOIN ACCEPT was received)
 bool lora_api_isJoined();

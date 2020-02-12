@@ -81,6 +81,8 @@ void sm_timer_stopE(SM_ID_t id, int e);
 // What state is this machine currently in?
 SM_STATE_ID_t sm_getCurrentState(SM_ID_t id);
 
+/** default log for unhandled event in a state to make debugging easier and centralised */
+void sm_default_event_log(SM_ID_t id, const char* log, int e);
 #ifdef __cplusplus
 }
 #endif

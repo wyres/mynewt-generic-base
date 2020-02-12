@@ -41,6 +41,7 @@ void ledCancel(int8_t gpio);
 #define FLASH_1HZ  ("11111000001111100000")       
 #define FLASH_2HZ ("11000110001100011000")
 #define FLASH_5HZ ("10101010101010101010")
+#define FLASH_ON  ("11111111111111111111")       
 
 
 #ifdef __cplusplus

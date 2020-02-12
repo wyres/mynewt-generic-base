@@ -21,11 +21,18 @@ extern "C" {
 
 typedef enum { UPRIGHT, INVERTED, FLAT_BACK, FLAT_FACE, UNKNOWN} MM_ORIENT;
 typedef void (*MM_CBFN_t)(void);
-
-// Refresh values. returns false if hw cannot be accessed
+/** Wake accelero for operation. Should be called before accessing data to ensure get fresh data */
+bool MMMgr_start();
+/** put accelero into lowest power mode compatible with being able to detect basic movement */
+bool MMMgr_stop();
+// Refresh values. returns false if hw cannot be accessed. Rgistered callbacks may be called during this function.
 bool MMMgr_check();
 // Register a callback for when movement detected
 bool MMMgr_registerMovementCB(MM_CBFN_t cb);
+// Register a callback for when orientation change detected
+bool MMMgr_registerOrientationCB(MM_CBFN_t cb);
+
+/** data accessors. Note that accessor fns do not read from device : call MMMgr_check() to update data. */
 // Last time a "movement" was detected
 uint32_t MMMgr_getLastMovedTime();
 // Has it moved since this relative time (in seconds since epoch)
@@ -36,15 +43,11 @@ bool MMMgr_hasFallenSince(uint32_t reltimeSecs);
 // Last time got a shock (>2G)
 uint32_t MMMgr_getLastShockTime();
 bool MMMgr_hasShockedSince(uint32_t reltimeSecs);
-// Register a callback for when orientation change detected
-bool MMMgr_registerOrientationCB(MM_CBFN_t cb);
 // Last time orientation changed to new value
 uint32_t MMMgr_getLastOrientTime();
 MM_ORIENT MMMgr_getOrientation();
-// in units of G/10
-int8_t MMMgr_getXdG();
-int8_t MMMgr_getYdG();
-int8_t MMMgr_getZdG();
+// in units of 1/16g, xyz values
+void MMMgr_getXYZ(int8_t* xp, int8_t* yp, int8_t* zp);
 
 #ifdef __cplusplus
 }

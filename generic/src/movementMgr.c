@@ -33,15 +33,18 @@
 static void callMovedCBs();
 static void checkMoved();
 static void checkOrientationChange();
+static MM_ORIENT calcOrient(int8_t x, int8_t y, int8_t z);
 
 static struct {
     // Registered callbacks fns
-    MM_CBFN_t movecbs[MAX_MMCBFNS];        // TODO should be a mempool
-    MM_CBFN_t orientcbs[MAX_MMCBFNS];        // TODO should be a mempool
-// current data from last read
+    MM_CBFN_t movecbs[MAX_MMCBFNS];     
+    MM_CBFN_t orientcbs[MAX_MMCBFNS];   
+    // current data from last read
     int8_t x;
     int8_t y;
     int8_t z;
+    bool active;                        // is the accelero hw activated?
+    ACC_DetectionMode_t detectionMode;
     uint32_t lastMoveTimeS;
     uint32_t lastFallTimeS;
     uint32_t lastShockTimeS;
@@ -54,15 +57,14 @@ static struct {
 void movement_init(void) 
 {
     //Accelero config
-    ACC_DetectionMode_t detectionMode = ACC_DetectionOff;
     uint8_t threshold = 0;
     uint8_t duration = 0;
     // clear context
     memset(&_ctx, 0, sizeof(_ctx));
     _ctx.orientation = UNKNOWN;
     //Retrieve config for accelero from EEPROM
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_ACCELERO_DETECTION_MODE, &detectionMode, sizeof(ACC_DetectionMode_t));
-    switch(detectionMode)
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_ACCELERO_DETECTION_MODE, &_ctx.detectionMode, sizeof(ACC_DetectionMode_t));
+    switch(_ctx.detectionMode)
     {
         case ACC_FreeFallDetection:
         {
@@ -93,7 +95,7 @@ void movement_init(void)
         log_noout("accelero hw init fails");
         wassert_hw_fault();
     }
-    if (ACC_setDetectionMode(detectionMode, threshold, duration) != ACC_SUCCESS)
+    if (ACC_setDetectionMode(_ctx.detectionMode, threshold, duration) != ACC_SUCCESS)
     {
         log_noout("accelero detection configuration fails");
         wassert_hw_fault();
@@ -128,65 +130,87 @@ bool MMMgr_registerOrientationCB(MM_CBFN_t cb) {
     }
     return false;
 }
-// poll accelero for x,y,z,moved,fall,shock
-// returns true if hw ok, false if access fails
-// TODO possbily should 'start'/'stop' to let accelero have time to decide which way is up before reading values?
-bool MMMgr_check() 
-{
-    bool hasDetected = false;
-    if (ACC_activate() == ACC_SUCCESS) 
-    {
-        log_debug("mm:check");
-        if (ACC_HasDetectedMoved(&hasDetected) == ACC_SUCCESS) 
-        {
-            if (hasDetected)
-            {
-                _ctx.movedSinceLastCheck = true;
-                _ctx.lastMoveTimeS = TMMgr_getRelTimeSecs();
-                log_debug("mm:MOVED");
-            }
-        }
-        else
-        {
-            log_warn("Accelero move detection failed");
-        }
-        hasDetected = false;
-        if (ACC_HasDetectedFreeFallOrShock(&hasDetected) == ACC_SUCCESS) 
-        {
-            if (hasDetected)
-            {
-                _ctx.lastFallTimeS = TMMgr_getRelTimeSecs();
-                log_debug("mm:FALLEN");
-            }
-        }
-        else
-        {
-            log_warn("Accelero move detection failed");
-        }
 
-        if (ACC_readXYZ(&_ctx.x, &_ctx.y, &_ctx.z) == ACC_SUCCESS)
-        {
-            log_debug("x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
-        }
-        else
-        {
-            log_warn("Accelero failed to read raw data");
-        }  
-        if (ACC_sleep() != ACC_SUCCESS)
-        {
-            log_warn("Accelero failed to go to sleep");
-        }
-    } 
-    else 
-    {
-        log_warn("mm:accelero failed to activate");
-        return false;
+bool MMMgr_start() {
+    // Ignore if already activated
+    if (!_ctx.active) {
+        _ctx.active = (ACC_activate() == ACC_SUCCESS);
     }
-    checkMoved();
-    checkOrientationChange();
-    return true;
+    MMMgr_check();      // update data from device now
+    return _ctx.active;
 }
 
+bool MMMgr_stop() {
+    MMMgr_check();      // update data from device before sleeping
+    // Ignore if already not active
+    if (_ctx.active) {
+        _ctx.active=false;
+        // This just attempts to put the accelero into its 'lowest' power mode : it should remain accessible, and monitor at least movement events
+        return (ACC_sleep() == ACC_SUCCESS);
+    }
+    return true;
+}
+// poll accelero for x,y,z,moved,fall,shock
+// Call MMMgr_start() before to get best data 
+// returns true if hw ok, false if access fails
+bool MMMgr_check() 
+{
+    bool ret = true;
+    bool hasDetected = false;
+    // NOTE : we check the hw independantly of the active/sleep status of the device, as 'sleep' should not prevent responses
+    if (ACC_HasDetectedMoved(&hasDetected) == ACC_SUCCESS) 
+    {
+        if (hasDetected)
+        {
+            _ctx.movedSinceLastCheck = true;
+            _ctx.lastMoveTimeS = TMMgr_getRelTimeSecs();
+            log_debug("mm:MOVED");
+        } else {
+            log_debug("mm:NOT MOVED");
+        }
+    }
+    else
+    {
+        log_warn("mm: move read failed");
+        ret = false;
+    }
+    hasDetected = false;
+    if (ACC_HasDetectedFreeFallOrShock(&hasDetected) == ACC_SUCCESS) 
+    {
+        if (hasDetected)
+        {
+            if (_ctx.detectionMode==ACC_FreeFallDetection) {
+                _ctx.lastFallTimeS = TMMgr_getRelTimeSecs();
+                log_debug("mm:FALLEN");
+            } else {
+                _ctx.lastShockTimeS = TMMgr_getRelTimeSecs();
+                log_debug("mm:SHOCK");
+            }
+        }
+    }
+    else
+    {
+        log_warn("mm: fall read failed");
+        ret = false;
+    }
+
+    if (ACC_readXYZ(&_ctx.x, &_ctx.y, &_ctx.z) == ACC_SUCCESS)
+    {
+//        log_debug("x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
+    }
+    else
+    {
+        log_warn("mm: failed read xyz");
+        ret = false;
+    }
+    // check if event means call callbacks 
+    checkMoved();
+    checkOrientationChange();
+    return ret;
+}
+
+/** access accelero info. Note that accessor fns do not read from device : call MMMgr_check() to update data.
+ * */
 uint32_t MMMgr_getLastMovedTime() 
 {
     return _ctx.lastMoveTimeS;
@@ -218,36 +242,18 @@ uint32_t MMMgr_getLastOrientTime()
 }
 MM_ORIENT MMMgr_getOrientation() 
 {
-    // evaluate x/y/z to determine this
-    if (abs(_ctx.y)>abs(_ctx.x) && abs(_ctx.y)>abs(_ctx.z)) {
-        if (_ctx.y>0) {
-            return UPRIGHT;
-        } else {
-            return INVERTED;
-        }
-    }
-    if (abs(_ctx.z)>abs(_ctx.x) && abs(_ctx.z)>abs(_ctx.y)) {
-        if (_ctx.z>0) {
-            return FLAT_FACE;
-        } else {
-            return FLAT_BACK;
-        }
-    }
-    return UNKNOWN;
+    return _ctx.orientation;
 }
-// in units of G/10 (decaG)
-int8_t MMMgr_getXdG()
-{
-    return _ctx.x;
+// in units of 1/16g 
+void MMMgr_getXYZ(int8_t* xp, int8_t* yp, int8_t* zp) {
+    // Always return our last known values anyway
+    *xp = _ctx.x;
+    *yp = _ctx.y;
+    *zp = _ctx.z;
+    log_debug("mm:x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
+
 }
-int8_t MMMgr_getYdG() 
-{
-    return _ctx.y;
-}
-int8_t MMMgr_getZdG() 
-{
-    return _ctx.z;
-}
+
 
 // internals
 static void callMovedCBs() 
@@ -268,12 +274,32 @@ static void checkMoved()
         _ctx.movedSinceLastCheck = false;
     }
 }
+static MM_ORIENT calcOrient(int8_t x, int8_t y, int8_t z) {
+       // evaluate x/y/z to determine this
+    if (abs(y)>abs(x) && abs(y)>abs(z)) {
+        if (y>0) {
+            return UPRIGHT;
+        } else {
+            return INVERTED;
+        }
+    }
+    if (abs(z)>abs(x) && abs(z)>abs(y)) {
+        if (z>0) {
+            return FLAT_FACE;
+        } else {
+            return FLAT_BACK;
+        }
+    }
+    return UNKNOWN;
+}
+
 static void checkOrientationChange() 
 {
-    if (MMMgr_getOrientation() != _ctx.orientation) 
+    MM_ORIENT o = calcOrient(_ctx.x, _ctx.y, _ctx.z);
+    if (o != _ctx.orientation) 
     {
         _ctx.lastOrientTimeS = TMMgr_getRelTimeSecs();
-        _ctx.orientation = MMMgr_getOrientation();
+        _ctx.orientation = o;
         for(int i=0;i<MAX_MMCBFNS;i++) 
         {
             if (_ctx.orientcbs[i]!=NULL) 

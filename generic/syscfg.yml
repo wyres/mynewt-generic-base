@@ -132,3 +132,5 @@ syscfg.vals:
 
     # main() stack size- needs to be reasonable as we use it for event execution for certain mgrs (uart etc)
 #    OS_MAIN_STACK_SIZE: 512
+    # rebootmgr handles watchdogging?
+#    WATCHDOG_INTERVAL : 0

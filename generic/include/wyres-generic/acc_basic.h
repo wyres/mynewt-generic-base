@@ -43,14 +43,15 @@ typedef enum
 ACC_Error_t ACC_init();
 
 /*!
- * @brief   Activate the accelerometer
+ * @brief   Activate the accelerometer : make it ready to get its 'best' data
  * @param   void
  * @return  true if success
  */
 ACC_Error_t ACC_activate();
 
 /*!
- * @brief   Put accelerometer in sleep mode
+ * @brief   Put accelerometer in sleep mode. This just attempts to put the accelero into 
+ * its 'lowest' power mode : it should remain accessible, and monitor at least movement events
  * @param   void
  * @return  true if success
  */

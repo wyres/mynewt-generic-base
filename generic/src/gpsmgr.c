@@ -32,6 +32,9 @@
 //static os_stack_t _gps_task_stack[GPS_TASK_STACK_SZ];
 //static struct os_task gps_mgr_task_str;
 
+// How long after last good fix until we have to do a cold start due to satellite positionning data being out of date? (in minutes)
+#define MAX_EPHEMERAL_DATA_TIME_MINS (3*60)
+
 // L96 GPS commands    
 static char* EASY_ON="$PMTK869,1,1*35\r\n";
 static char* HOT_START="$PMTK101*32\r\n";
@@ -39,6 +42,9 @@ static char* COLD_START="$PMTK103*30\r\n";
 // Standby mode is 500uA, but can be exited by uart data... but must send it a start command?
 static char* STANDBY_MODE="$PMTK161,0*28\r\n";
 static char* STARTUP_RESP="$PMTK";      // Only need to check start of response
+
+// How many 'good comm credits' can we accumulate?
+#define MAX_COMM_GOOD_CREDITS (5)
 
 static struct appctx {
     struct os_event myGPSEvent;
@@ -54,7 +60,16 @@ static struct appctx {
     wskt_t* cnx;
     uint8_t rxbuf[WSKT_BUF_SZ+1];
     gps_data_t gpsData;
-    uint32_t lastFixTime;
+    struct  {
+        uint8_t secs;
+        uint8_t mins;
+        uint8_t hours;
+        uint8_t day;
+        uint8_t month;
+        uint8_t year;
+    } lastFixTS;
+    uint32_t cntGGA_OK;
+    uint32_t cntGGA_NOK;
     GPS_CB_FN_t cbfn;
     uint8_t commOk;     // Count of good lines received or 0 if not active
     uint8_t startupCnt; // count of times we see the gps staryup response in each session to detect brownouts
@@ -100,7 +115,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             return MS_STARTING_COMM;
         }
         default: {
-            log_debug("GPS:? %d in Idle", e);
+            sm_default_event_log(ctx->mySMId, "GPS", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -131,15 +146,6 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
                 return SM_STATE_CURRENT;
             }
 
-            if (ctx->powerMode==POWER_ONSTANDBY) {
-                // wake it up and help it to know how to progress
-                wskt_write(ctx->cnx, (uint8_t*)EASY_ON, strlen(EASY_ON));
-                if (gps_lastGPSFixAgeMins() < 0 || gps_lastGPSFixAgeMins()>3*60) {
-                    wskt_write(ctx->cnx, (uint8_t*)COLD_START, strlen(COLD_START));
-                } else {
-                    wskt_write(ctx->cnx, (uint8_t*)HOT_START, strlen(HOT_START));
-                }
-            }
             // start timeout for comm check - initial timer for 5s to at least get connection up
             sm_timer_start(ctx->mySMId, 5000);
 
@@ -192,6 +198,16 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
             cmd.cmd = IOCTL_SELECTUART;
             cmd.param = ctx->uartSelect;
             wskt_ioctl(ctx->cnx, &cmd);
+            // Uart ready for us, wake up GPS if its on standby
+            if (ctx->powerMode==POWER_ONSTANDBY) {
+                // wake it up and help it to know how to progress
+                wskt_write(ctx->cnx, (uint8_t*)EASY_ON, strlen(EASY_ON));
+                if (gps_lastGPSFixAgeMins() < 0 || gps_lastGPSFixAgeMins() > MAX_EPHEMERAL_DATA_TIME_MINS) {
+                    wskt_write(ctx->cnx, (uint8_t*)COLD_START, strlen(COLD_START));
+                } else {
+                    wskt_write(ctx->cnx, (uint8_t*)HOT_START, strlen(HOT_START));
+                }
+            }
             return SM_STATE_CURRENT;
         }
 
@@ -213,7 +229,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
         }
 
         default: {
-            log_debug("GPS:? %d in StartingComm", e);
+            sm_default_event_log(ctx->mySMId, "GPS", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -255,7 +271,7 @@ static SM_STATE_ID_t State_GettingFix(void* arg, int e, void* data) {
         }
 
         default: {
-            log_debug("GPS:? %d in GettingFix", e);
+            sm_default_event_log(ctx->mySMId, "GPS", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -273,7 +289,7 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
                     wskt_write(ctx->cnx, (uint8_t*)STANDBY_MODE, strlen(STANDBY_MODE));
                 }
             } else {
-                log_debug("GPS:stopping");
+                log_debug("GPS:stopping GGA %d ok, %d nok", _ctx.cntGGA_OK, _ctx.cntGGA_NOK);
             }
             // basically it gets 200ms to absorb this last command before the uart goes away
             sm_timer_start(ctx->mySMId, 200);
@@ -305,7 +321,7 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
             // ignore we're already stopping
         }
         default: {
-            log_debug("GPS:? %d in StoppingComm", e);
+            sm_default_event_log(ctx->mySMId, "GPS", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -401,12 +417,15 @@ int32_t gps_lastGPSFixAgeMins() {
     }
 }
 
-// TODO Should be a SM?
+// Start GPS aquisition
 void gps_start(GPS_CB_FN_t cbfn, uint32_t tsecs) {
+    _ctx.cntGGA_OK = 0;
+    _ctx.cntGGA_NOK = 0;
     _ctx.cbfn = cbfn;
     _ctx.fixTimeoutSecs = tsecs;
     sm_sendEvent(_ctx.mySMId, ME_START_GPS, NULL);
 }
+// Stop the GPS unit
 void gps_stop() {
     sm_sendEvent(_ctx.mySMId, ME_STOP_GPS, NULL);
 }
@@ -443,8 +462,8 @@ static void gps_mgr_rxcb(struct os_event* ev) {
         return;
     }
 
-    // good comm credit
-    if (_ctx.commOk<5) {
+    // good comm credit - add credit if not already maxed out
+    if (_ctx.commOk<MAX_COMM_GOOD_CREDITS) {
         if (_ctx.commOk==0) {
             sm_sendEvent(_ctx.mySMId, ME_GPS_CONN_OK, NULL);
         }
@@ -494,6 +513,7 @@ static int32_t rescale(struct minmea_float* v, int newscale) {
         return (v->value / (v->scale/newscale));
     }
 }
+
 // Returns true if parsed ok, false if unparseable.
 // sets the 'prec' to 0 if no location data extracted
 static bool parseNEMA(const char* line, gps_data_t* nd) {
@@ -520,13 +540,21 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
                     if (nd->prec < 30) {
                         nd->prec = 30;  // ie 3.0m
                     }
-                    log_debug("GPS:gga fix lat %d(%d/%d), lon %d(%d/%d) alt %d(%d/%d) prec %d(%d/%d)", 
+                    // Log once per 30 lines ie once per 30s approx
+                    if ((_ctx.cntGGA_OK % 30)==0) {
+                        log_debug("GPS:gga fix lat %d(%d/%d), lon %d(%d/%d) alt %d(%d/%d) prec %d(%d/%d)", 
                         nd->lat, ggadata.latitude.value, ggadata.latitude.scale,
                         nd->lon, ggadata.longitude.value, ggadata.longitude.scale,
                         nd->alt, ggadata.altitude.value, ggadata.altitude.scale,
                         nd->prec, ggadata.hdop.value, ggadata.hdop.scale);
+                    }
+                    _ctx.cntGGA_OK++;
                 } else {
-                    log_debug("GPS:gga no fix %d", ggadata.satellites_tracked);
+                    // Log once per 30 lines ie once per 30s approx
+                    if ((_ctx.cntGGA_NOK % 30)==0) {
+                        log_debug("GPS:gga no fix %d", ggadata.satellites_tracked);
+                    }
+                    _ctx.cntGGA_NOK++;
                 }
             } else {
                 // hmmm not so good
@@ -591,19 +619,21 @@ static bool parseNEMA(const char* line, gps_data_t* nd) {
             return true;
         }
         case MINMEA_SENTENCE_RMC: {
-#ifdef DEBUG_GPS
             struct minmea_sentence_rmc rmcdata;
             if (minmea_parse_rmc(&rmcdata, line)) {
                 if (rmcdata.valid) {
+                    // could be useful but GGA has more data - only use to extract current absolute time
+                    _ctx.lastFixTS.secs = rmcdata.time.seconds;
+                    _ctx.lastFixTS.mins = rmcdata.time.minutes;
+                    _ctx.lastFixTS.hours = rmcdata.time.hours;
+                    _ctx.lastFixTS.day = rmcdata.date.day;
+                    _ctx.lastFixTS.month = rmcdata.date.month;
+                    _ctx.lastFixTS.year = rmcdata.date.year;
+#ifdef DEBUG_GPS
                     log_debug("GPS:rmc fix");
-                } else {
-                    log_debug("GPS:rmc no fix");
+#endif
                 }
-            } else {
-                log_debug("GPS:rmc nok");
             }
-#endif /* DEBUG_GPS */
-            // could be useful but GGA has more data - ignore
             return true;
         }
         default: {

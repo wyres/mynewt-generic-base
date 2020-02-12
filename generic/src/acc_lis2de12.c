@@ -347,7 +347,7 @@ ACC_Error_t ACC_activate() {
 
 ACC_Error_t ACC_sleep() {
     //Leave XYZ enabled, 10Hz frequency
-    if (LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_TEN_HZ_MASK)) != LIS2DE12_OK)
+    if (LIS2DE12_WriteReg(LIS2DE_CTRL_REG1, (LIS2DE_XYZ_EN_MASK | LIS2DE_ONE_HZ_MASK)) != LIS2DE12_OK)
     {
         return ACC_ERROR;
     }
@@ -388,7 +388,7 @@ ACC_Error_t ACC_HasDetectedMoved(bool *hasDetectedMove)
         return ACC_ERROR;
     }
     // read of reg clears it
-    //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
+    //If IA register of INT1_SRC is SET, means that one or more detection events have occured since last check
     if ((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
     {
         *hasDetectedMove = true;
@@ -410,7 +410,7 @@ ACC_Error_t ACC_HasDetectedFreeFallOrShock(bool *hasDetectedMove)
         return ACC_ERROR;
     }
     // read of reg clears it
-    //If IA register of INT1_SRC is SET, means that one or more interrupts have occured since last check
+    //If IA register of INT2_SRC is SET, means that one or more detection events have occured since last check
     if((Rx & LIS2DE_INT_IA_MASK) == LIS2DE_INT_IA_MASK)
     {
         *hasDetectedMove = true;

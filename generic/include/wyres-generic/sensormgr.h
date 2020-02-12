@@ -26,7 +26,10 @@ typedef void (*SR_BUTTON_CBFN_t)(void* ctx, SR_BUTTON_STATE_t currentState, SR_B
 
 typedef void (*SR_NOISE_CBFN_t)(void* ctx, int noiseFreq, int noiseDBm);
 
-void SRMgr_start();
+/** 
+ * startup sensors ready for reading. Returns true if all ok, false if hw issue
+ */
+bool SRMgr_start();
 void SRMgr_stop();
 
 uint32_t SRMgr_getLastButtonTimeSecs();
@@ -43,9 +46,7 @@ bool SRMgr_registerNoiseCB(SR_NOISE_CBFN_t cb, void* ctx);
 // Remove registration - if noone is registered then micro input only checked at UL time..
 void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb);
 
-// When did temp, pressure, battery, light last change 'significantly'? In seconds since boot.
-uint32_t SRMgr_getLastEnvChangeTimeSecs();
-int16_t SRMgr_getTempdC();
+int16_t SRMgr_getTempcC();
 int32_t SRMgr_getPressurePa();
 uint16_t SRMgr_getBatterymV();
 uint8_t SRMgr_getLight();
@@ -63,8 +64,14 @@ bool SRMgr_hasBattChanged();
 bool SRMgr_hasLightChanged();
 bool SRMgr_hasADC1Changed();
 bool SRMgr_hasADC2Changed();
-bool SRMgr_updateEnvs(bool forceChange);
-
+// signal can update the 'last' value as used the new value
+void SRMgr_updateTemp();
+void SRMgr_updatePressure();
+void SRMgr_updateBatt();
+void SRMgr_updateLight();
+void SRMgr_updateADC1();
+void SRMgr_updateADC2();
+void SRMgr_updateButton();
 #ifdef __cplusplus
 }
 #endif

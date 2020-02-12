@@ -61,18 +61,17 @@ static struct {
         void* ctx;
     } noiseCBs[MAX_CBS];
     uint32_t lastReadTS;                // in seconds since boot
-    uint32_t lastSignificantChangeTS;   // in seconds since boot
     uint32_t lastButtonPressTS;         // in ms since boot
     uint32_t lastButtonReleaseTS;       // in ms since boot
     uint8_t currButtonState;
     uint8_t lastButtonState;
     uint8_t lastButtonPressType;
     bool isActive;
-    int16_t currTempdC;
+    int16_t currTempcC;
     uint16_t currBattmV;
     int32_t currPressurePa;
     uint8_t currLight;
-    int16_t lastTempdC;
+    int16_t lastTempcC;
     uint16_t lastBattmV;
     uint32_t lastPressurePa;
     uint8_t lastLight;
@@ -93,9 +92,9 @@ static struct {
 #define I2C_ACCESS_TIMEOUT (100)
 
 static void buttonCB(void* arg);
-static void config();
+static bool config();
     // read stuff into current values
-static void readEnv();
+static bool readEnv();
 static void deconfig();
 static uint32_t delta(int a, int b);
 static void buttonCheckDebounced(struct os_event* e);
@@ -126,14 +125,16 @@ void SRMgr_init(void)
 
 }
 
-void SRMgr_start() 
+bool SRMgr_start() 
 {
+    bool ret = true;
     // While active sensing dont turn off periphs please
     LPMgr_setLPMode(_ctx.lpUserId, LP_DOZE);
     // configure GPIOs / I2C for periphs
-    config();
+    ret &= config();
     // read stuff into current values
     readEnv();
+    return ret;
 }
 
 void SRMgr_stop() 
@@ -206,10 +207,6 @@ void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb)
     }
 }
 
-uint32_t SRMgr_getLastEnvChangeTimeSecs() 
-{
-    return _ctx.lastSignificantChangeTS;
-}
 bool SRMgr_hasButtonChanged() 
 {
     return (_ctx.currButtonState != _ctx.lastButtonState);
@@ -218,6 +215,11 @@ uint8_t SRMgr_getButton()
 {
     readEnv();
     return _ctx.currButtonState;
+}
+void SRMgr_updateButton() 
+{
+    readEnv();
+    _ctx.lastButtonState = _ctx.currButtonState;
 }
 uint8_t SRMgr_getLastButtonPressType() 
 {
@@ -234,13 +236,19 @@ uint32_t SRMgr_getLastButtonReleaseTS()
 bool SRMgr_hasTempChanged() 
 {
     readEnv();      // ensure uptodate
-    return (delta(_ctx.currTempdC, _ctx.lastTempdC)>5);
+    return (delta(_ctx.currTempcC, _ctx.lastTempcC)>50);
 }
-int16_t SRMgr_getTempdC() 
+int16_t SRMgr_getTempcC() 
 {
     readEnv();
-    return _ctx.currTempdC;        // value in 1/10 C
+    return _ctx.currTempcC;        // value in 1/100 C
 }
+void SRMgr_updateTemp() 
+{
+    readEnv();
+    _ctx.lastTempcC = _ctx.currTempcC;
+}
+
 bool SRMgr_hasPressureChanged() 
 {
     readEnv();      // ensure uptodate
@@ -251,6 +259,12 @@ int32_t SRMgr_getPressurePa()
     readEnv();
     return _ctx.currPressurePa;       // in Pa
 }
+void SRMgr_updatePressure() 
+{
+    readEnv();
+    _ctx.lastPressurePa = _ctx.currPressurePa;
+}
+
 bool SRMgr_hasBattChanged() 
 {
     readEnv();      // ensure uptodate
@@ -261,6 +275,12 @@ uint16_t SRMgr_getBatterymV()
     readEnv();
     return _ctx.currBattmV;         // in mV
 }
+void SRMgr_updateBatt() 
+{
+    readEnv();
+    _ctx.lastBattmV = _ctx.currBattmV;
+}
+
 bool SRMgr_hasLightChanged() 
 {
     readEnv();      // ensure uptodate
@@ -271,6 +291,12 @@ uint8_t SRMgr_getLight()
     readEnv();
     return _ctx.currLight;
 }
+void SRMgr_updateLight() 
+{
+    readEnv();
+    _ctx.lastLight = _ctx.currLight;
+}
+
 uint32_t SRMgr_getLastNoiseTimeSecs() 
 {
     readEnv();      // ensure uptodate
@@ -297,6 +323,11 @@ uint16_t SRMgr_getADC1mV()
     readEnv();
     return _ctx.currADC1mV;
 }
+void SRMgr_updateADC1() 
+{
+    readEnv();
+    _ctx.lastADC1mV = _ctx.currADC1mV;
+}
 bool SRMgr_hasADC2Changed() 
 {
     readEnv();      // ensure uptodate
@@ -307,53 +338,12 @@ uint16_t SRMgr_getADC2mV()
     readEnv();
     return _ctx.currADC2mV;
 }
-// Any value that has changed 'significantly' has the last value updated to the current 
-// app layer can decide to do this after having read and sent values that had changed
-bool SRMgr_updateEnvs(bool forceChange) 
+void SRMgr_updateADC2() 
 {
-    bool changed = false;
-    // only update those that have changed (otherwise slowly changing values will never be seen as changed)
-    if (forceChange || SRMgr_hasBattChanged()) 
-    {
-        _ctx.lastBattmV = _ctx.currBattmV;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasLightChanged()) 
-    {
-        _ctx.lastLight = _ctx.currLight;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasTempChanged()) 
-    {
-        _ctx.lastTempdC = _ctx.currTempdC;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasPressureChanged()) 
-    {
-        _ctx.lastPressurePa = _ctx.currPressurePa;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasADC1Changed()) 
-    {
-        _ctx.lastADC1mV = _ctx.currADC1mV;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasADC2Changed()) 
-    {
-        _ctx.lastADC2mV = _ctx.currADC2mV;
-        changed = true;
-    }
-    if (forceChange || SRMgr_hasButtonChanged()) 
-    {
-        _ctx.lastButtonState = _ctx.currButtonState;
-        changed = true;
-    }
-    if (changed) 
-    {
-        _ctx.lastSignificantChangeTS = TMMgr_getRelTimeSecs();
-    }
-    return changed;
+    readEnv();
+    _ctx.lastADC2mV = _ctx.currADC2mV;
 }
+
 // internals
 static SR_BUTTON_PRESS_TYPE_t calcButtonPressType(uint32_t durms) 
 {
@@ -419,7 +409,7 @@ static void buttonCheckDebounced(struct os_event* e)
         }
     } // else it toggled but settled into same state as before -> no transition
 }
-static void config() 
+static bool config() 
 {
     if (!_ctx.isActive) {
         _ctx.isActive = true;
@@ -448,17 +438,20 @@ static void config()
         if (ALTI_activate() != ALTI_SUCCESS)
         {
             log_warn("SM:Erractivate alti");
+            return false;
         }
 
         // config noise detector on micro
         // TODO
     }
+    return true;
 }
 
 
 // read stuff into current values
-static void readEnv() 
+static bool readEnv() 
 {
+    bool ret=true;
     if (_ctx.isActive) 
     {
         _ctx.lastReadTS = TMMgr_getRelTimeSecs();
@@ -506,14 +499,16 @@ static void readEnv()
         {
             _ctx.currADC2mV = GPIO_readADC(GPIO_ADC2);
         }
-        if (ALTI_readAllData(&_ctx.currPressurePa, &_ctx.currTempdC) != ALTI_SUCCESS)
+        if (ALTI_readAllData(&_ctx.currPressurePa, &_ctx.currTempcC) != ALTI_SUCCESS)
         {
             log_warn("SM:Err read alti");
+            ret = false;
         } else {
             //            log_debug("SM:temp %d", _ctx.currTempdC);
             //            log_debug("SM:press %d", _ctx.currPressurePa);
         }
     }
+    return ret;
 }
 
 

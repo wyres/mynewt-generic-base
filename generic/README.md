@@ -28,7 +28,7 @@ lowpowermgr : api to allow drivers/app code to be notified when low power sleep 
 
 wconsole : basic console handling which allows AT command set type interactions and deals with line parsing etc. The actual AT command sets are defined by the applicatin code as 'command/fn callback' pairs.
 
-sm_exec : FSM (state machine) framework allowing the definition of multiple table based state machines, driven by events and serially executed by a single task. 
+sm_exec : FSM (state machine) framework allowing the definition of multiple table based state machines, driven by events and serially executed by a single task. Note that use of this framework REQUIRES a NON-BLOCKING, ASYNCHRONOUS and EVENT DRIVEN architecture....
 
 cirbuf : circular byte buffer utility implementation : thanks to Siddharth Chandrasekaran from Embed journal!
 

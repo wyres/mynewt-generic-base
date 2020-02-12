@@ -18,6 +18,7 @@
 #include "hal/hal_system.h"
 #include "hal/hal_watchdog.h"
 #include "mcu/stm32_hal.h"
+#include "bsp.h"
 
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/configmgr.h"
@@ -27,6 +28,7 @@
 // Led task should be high pri as does very little but wants to do it in real time
 #define WATCHDOG_TASK_PRIO       MYNEWT_VAL(WATCHDOG_TASK_PRIO)
 #define WATCHDOG_TASK_STACK_SZ   OS_STACK_ALIGN(32)
+#define WATCHDOG_TIMEOUT_SECS (28)      // coz max
 
 #define REBOOT_LIST_SZ  (8)
 #define FN_LIST_SZ  (8*8)   // for 8 entries, each of 2 uint32_ts
@@ -96,14 +98,24 @@ void reboot_init(void) {
     // From hal
     _resetReason[3] = '0'+(hal_reset_cause() %10);
 
+    // If rebooted to enter stock mode (ie no watchdog), then do it
+    if (_appReasonCode==RM_ENTER_STOCK_MODE) {
+        // Normally noone is initialised yet, so we don't need to cleanup
+        hal_bsp_halt();
+        assert(0);      // not returning
+    }
+
     // Create task to tickle watchdog from default task
     os_task_init(&_watchdog_task_str, "watchdog", &watchdog_task, NULL, WATCHDOG_TASK_PRIO,
                  OS_WAIT_FOREVER, _watchdog_task_stack, WATCHDOG_TASK_STACK_SZ);
-
+    // deal with watchdog here if OS not doing to (interval at 0 means app responsible)
+#if MYNEWT_VAL(WATCHDOG_INTERVAL) == 0
+    // TODO replace with system level watchdog due to the 28s max timeout limit
     // init watchdog
-//    hal_watchdog_init(5*60*1000);       // 5 minutes
+    hal_watchdog_init(WATCHDOG_TIMEOUT_SECS*1000);       // 28s is the max...
     // and start it
-//    hal_watchdog_enable();       
+    hal_watchdog_enable();       
+#endif
 }
 
 void RMMgr_reboot(uint8_t reason) {
@@ -187,7 +199,7 @@ void* RMMgr_getLogFn(uint8_t offset) {
 static void watchdog_task(void* arg) {
     while(1) {
         hal_watchdog_tickle();
-        // sleep for 1 minute
-        os_time_delay(OS_TICKS_PER_SEC*60);
+        // sleep for half watchdog timeout
+        os_time_delay(OS_TICKS_PER_SEC*(WATCHDOG_TIMEOUT_SECS/2));
     }
 }

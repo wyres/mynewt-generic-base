@@ -2163,10 +2163,9 @@ static LPS22HB_Error_et LPS22HB_Get_RawTemperature(int16_t* raw_data)
 
 
 /**
-* @brief    Get the Temperature value in �C.
+* @brief    Get the Temperature value in 1/100 of C.
 * @detail   Temperature data are expressed as TEMP_OUT_H&TEMP_OUT_L as 2�s complement number.
-*           Tout(degC)=TEMP_OUT/100
-* @param Buffer to empty with the temperature value that must be divided by 10 to get the value in �C
+* @param Tout to fill with the temperature value in 1/100 of C
 * @retval  Error Code [LPS22HB_ERROR, LPS22HB_OK]
 */
 static LPS22HB_Error_et LPS22HB_Get_Temperature(int16_t* Tout)

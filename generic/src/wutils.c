@@ -107,7 +107,12 @@ void __assert_func(const char *file, int line, const char *func, const char *e) 
     // actually wassert_fn never returns
     exit(-1);
 }
+
 */
+
+
+
+
 // Override/callback from reboot.
 void wreboot_cb(void) {
     RMMgr_reboot(RM_ASSERT);
@@ -412,4 +417,38 @@ uint16_t Util_readLE_uint16_t(uint8_t* b, uint8_t l) {
         } // else 0
     }
     return ret;
+}
+
+/* 
+Return true if data block is not just 0's, false if it is
+*/
+bool Util_notAll0(const uint8_t *p, uint8_t sz)
+{
+    assert(p != NULL);
+    for (int i = 0; i < sz; i++)
+    {
+        if (*(p + i) != 0x00)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+/*
+ * Calculate simple hash from string input
+ */
+#define MULTIPLIER (37)
+uint32_t Util_hashstrn(const char* s, int maxlen) {
+    int i=0;
+    uint32_t h = 0;
+    /* cast s to unsigned const char * */
+    /* this ensures that elements of s will be treated as having values >= 0 */
+    unsigned const char *us = (unsigned const char *) s;
+
+    while(*us != '\0' && i<maxlen) {
+        h = h * MULTIPLIER + us[i];
+        i++;
+    } 
+
+    return h;
 }
