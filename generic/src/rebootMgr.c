@@ -28,15 +28,10 @@
 // Led task should be high pri as does very little but wants to do it in real time
 #define WATCHDOG_TASK_PRIO       MYNEWT_VAL(WATCHDOG_TASK_PRIO)
 #define WATCHDOG_TASK_STACK_SZ   OS_STACK_ALIGN(32)
-#define WATCHDOG_TIMEOUT_SECS (28)      // coz max
+#define WATCHDOG_TIMEOUT_SECS (5*60)        // 5 minutes watchdog 
 
 #define REBOOT_LIST_SZ  (8)
 #define FN_LIST_SZ  (8*8)   // for 8 entries, each of 2 uint32_ts
-
-static void watchdog_task(void* arg);
-
-static os_stack_t _watchdog_task_stack[WATCHDOG_TASK_STACK_SZ];
-static struct os_task _watchdog_task_str;
 
 static char* _resetReason="AP/M\0";
 static uint8_t _appReasonCode = 0;
@@ -63,6 +58,7 @@ static enum RM_reason mapHalResetCause() {
             return RM_HARD_RESET;
     }
 }
+
 // run at startup
 void reboot_init(void) {
     // get reboot reason from PROM
@@ -104,17 +100,9 @@ void reboot_init(void) {
         hal_bsp_halt();
         assert(0);      // not returning
     }
-
-    // Create task to tickle watchdog from default task
-    os_task_init(&_watchdog_task_str, "watchdog", &watchdog_task, NULL, WATCHDOG_TASK_PRIO,
-                 OS_WAIT_FOREVER, _watchdog_task_stack, WATCHDOG_TASK_STACK_SZ);
-    // deal with watchdog here if OS not doing to (interval at 0 means app responsible)
+    // If OS not doing watchdog then enable our management of it
 #if MYNEWT_VAL(WATCHDOG_INTERVAL) == 0
-    // TODO replace with system level watchdog due to the 28s max timeout limit
-    // init watchdog
-    hal_watchdog_init(WATCHDOG_TIMEOUT_SECS*1000);       // 28s is the max...
-    // and start it
-    hal_watchdog_enable();       
+    RMMgr_watchdog_init(WATCHDOG_TIMEOUT_SECS);
 #endif
 }
 
@@ -196,10 +184,76 @@ void* RMMgr_getLogFn(uint8_t offset) {
     return entry->caller;
 }
 
+
+// application or hal level watchdog and task management
+static struct {
+    os_stack_t watchdog_task_stack[WATCHDOG_TASK_STACK_SZ];
+    struct os_task watchdog_task_str;
+    uint32_t    timeoutMS;
+    uint32_t    last_tickleTS;
+    struct os_callout timer;
+    bool isEnabled;
+} _awctx;
+
 static void watchdog_task(void* arg) {
     while(1) {
-        hal_watchdog_tickle();
+        RMMgr_watchdog_tickle();
         // sleep for half watchdog timeout
-        os_time_delay(OS_TICKS_PER_SEC*(WATCHDOG_TIMEOUT_SECS/2));
+        os_time_delay(os_time_ms_to_ticks32(_awctx.timeoutMS/2));
+    }
+}
+
+static void app_watchdog_timeoutcb(struct os_event *d) {
+    // are we enabled, and if so, did we get tickled recently?
+    if (_awctx.isEnabled && (TMMgr_getRelTimeSecs()-_awctx.last_tickleTS) > _awctx.timeoutMS) {
+        // no, rbye bye
+        assert(0);
+    }
+    // yes, restart timer
+    os_callout_reset(&_awctx.timer, os_time_ms_to_ticks32(_awctx.timeoutMS));
+}
+void RMMgr_watchdog_init(uint32_t timeoutsecs) {
+    _awctx.isEnabled = false;
+    _awctx.timeoutMS = timeoutsecs*1000;
+    // Create task to tickle watchdog from default task
+    os_task_init(&_awctx.watchdog_task_str, "watchdog", &watchdog_task, NULL, WATCHDOG_TASK_PRIO,
+                 OS_WAIT_FOREVER, _awctx.watchdog_task_stack, WATCHDOG_TASK_STACK_SZ);
+    // deal with watchdog here if OS not doing to (interval at 0 means app responsible)
+    // If the watchdog is set to <28s we can use the STM32 internal watchdog timer (which is very low level and robust)
+    if (WATCHDOG_TIMEOUT_SECS < 28) {
+        // TODO replace with system level watchdog due to the 28s max timeout limit
+        // init watchdog
+        hal_watchdog_init(_awctx.timeoutMS);       // 28s is the max...
+    } else {
+        os_callout_init(&_awctx.timer, os_eventq_dflt_get(), app_watchdog_timeoutcb, NULL);
+        os_callout_reset(&_awctx.timer, os_time_ms_to_ticks32(_awctx.timeoutMS));
+    }
+    // and start it
+    RMMgr_watchdog_enable();       
+}
+void RMMgr_watchdog_enable() {
+    if (WATCHDOG_TIMEOUT_SECS < 28) {
+        // TODO replace with system level watchdog due to the 28s max timeout limit
+        // init watchdog
+        hal_watchdog_init(WATCHDOG_TIMEOUT_SECS*1000);       // 28s is the max...
+        // and start it
+        hal_watchdog_enable();       
+    } else {
+        _awctx.isEnabled = true;
+    }
+}
+void RMMgr_watchdog_disable() {
+    if (WATCHDOG_TIMEOUT_SECS < 28) {
+        // oops cant do that
+    } else {
+        _awctx.isEnabled = false;
+    }
+}
+/** update watchdog */
+void RMMgr_watchdog_tickle() {
+    if (WATCHDOG_TIMEOUT_SECS < 28) {
+        hal_watchdog_tickle();
+    } else {
+        _awctx.last_tickleTS = TMMgr_getRelTimeSecs();
     }
 }
