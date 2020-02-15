@@ -27,7 +27,7 @@
 
 // Led task should be high pri as does very little but wants to do it in real time
 #define WATCHDOG_TASK_PRIO       MYNEWT_VAL(WATCHDOG_TASK_PRIO)
-#define WATCHDOG_TASK_STACK_SZ   OS_STACK_ALIGN(32)
+#define WATCHDOG_TASK_STACK_SZ   OS_STACK_ALIGN(64)
 #define WATCHDOG_TIMEOUT_SECS (5*60)        // 5 minutes watchdog 
 
 #define REBOOT_LIST_SZ  (8)
