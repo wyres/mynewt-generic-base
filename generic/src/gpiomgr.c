@@ -351,7 +351,6 @@ static void deinit_hal(GPIO_t* p) {
             highz_cfg.Pin = p->pin;
             highz_cfg.Alternate = p->pin;
             hal_gpio_init_stm(highz_cfg.Pin, &highz_cfg);
-            //hal_gpio_init_analog_input(p->pin);
         }
     }
 }

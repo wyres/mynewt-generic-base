@@ -86,7 +86,7 @@ int LPMgr_getMode() {
     } else if (_ctx.sleepMode == LP_DEEPSLEEP) {
         return HAL_BSP_POWER_SLEEP;     // NOTE : we don't use HAL_BSP_POWER_DEEP_SLEEP as this implies RAM loss
     } else if (_ctx.sleepMode == LP_SLEEP) {
-        return HAL_BSP_POWER_SLEEP;     // CPU + pêriphs paused
+        return HAL_BSP_POWER_WFI;       // Only CPU pause bus still run
     } else {
         // LP_DOZE normally
         return HAL_BSP_POWER_WFI;       // Only CPU pause
