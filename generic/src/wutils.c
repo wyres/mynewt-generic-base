@@ -63,13 +63,11 @@ void wassert_fn(const char* file, int lnum) {
 }
 
 void wassert_hw_fault() {
-    #if 0
-
     // see https://gcc.gnu.org/onlinedocs/gcc/Return-Address.html
-    volatile void* assert_caller = 0;
-    assert_caller = (void*)__builtin_extract_return_addr(__builtin_return_address(0));
-    RMMgr_saveAssertCaller((void*)assert_caller);
-    log_blocking_fn(1,"hw fail assert from [%8x] see APP.elf.lst", (void*)assert_caller);
+    void* assert_caller = 0;
+    assert_caller = __builtin_extract_return_addr(__builtin_return_address(0));
+    RMMgr_saveAssertCaller(assert_caller);
+    log_blocking_fn(1,"hw fail assert from [%8x] see APP.elf.lst", assert_caller);
     // flash led
     hal_gpio_init_out(LED_1, 1);
     hal_gpio_init_out(LED_2, 0);
@@ -90,7 +88,6 @@ void wassert_hw_fault() {
             RMMgr_reboot(RM_HW_ERR);
         }
     }
-    #endif
 }
 
 // This is the assert fn mapped to by OS_CRASH() in os_fault.h which is mapped by the system assert.h in mynewt
