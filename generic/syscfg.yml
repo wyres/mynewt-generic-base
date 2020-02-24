@@ -121,4 +121,3 @@ syscfg.defs:
         description: "LED flash pattern for wifi scan"
         value: "1000010000"
 
-syscfg.vals:
