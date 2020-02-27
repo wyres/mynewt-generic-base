@@ -426,12 +426,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
         }
         case ME_BLE_RET_ERR: {
             // retry scan command
-            if (ctx->uuid!=NULL) {
-                // TODO start srting is ",UUID"
-                wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_START, strlen(BLE_SCAN_START));
-            } else {
-                wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_START, strlen(BLE_SCAN_START));
-            }
+            wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_START, strlen(BLE_SCAN_START));
 
             return SM_STATE_CURRENT;
         }
