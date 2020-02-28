@@ -442,7 +442,7 @@ uint32_t Util_hashstrn(const char* s, int maxlen) {
     /* this ensures that elements of s will be treated as having values >= 0 */
     unsigned const char *us = (unsigned const char *) s;
 
-    while(*us != '\0' && i<maxlen) {
+    while(us[i] != '\0' && i<maxlen) {
         h = h * MULTIPLIER + us[i];
         i++;
     } 
