@@ -57,6 +57,9 @@ bool CFMgr_registerCB(CFG_CBFN_t cb) {
     if (_cfg.nCBs>=MAX_CFG_CBS) {
         return false;
     }
+    if (cb==NULL) {
+        return false;
+    }
     _cfg.cbList[_cfg.nCBs++] = cb;
     return true;
 }
@@ -399,7 +402,7 @@ static int createKey(uint16_t k, uint8_t l, uint8_t* d) {
     }
     int ret = _cfg.nbKeys;
     // Wrtie to PROM new index entry
-    // TODO check results of PROM accesses and fail nicely
+    // check results of PROM accesses and fail nicely
     if (!hal_bsp_nvmWrite16(_cfg.indexStart+ret*INDEX_SIZE, k)) {
         log_noout("CFG fail to write at %4x key %4x",_cfg.indexStart+ret*INDEX_SIZE, k);
         return -1;       // no joy
@@ -428,10 +431,16 @@ static int createKey(uint16_t k, uint8_t l, uint8_t* d) {
     // Update number of key in index in PROM
     if (!hal_bsp_nvmWrite8(1, _cfg.nbKeys)) {
         log_noout("CFG fail to write nbKeysSec %2x",_cfg.nbKeys);
+        // rewind
+        _cfg.storeOffset-=l;
+        _cfg.nbKeys--;
         return -1;       // no joy
     }
     if (!hal_bsp_nvmWrite8(0, _cfg.nbKeys)) {
         log_noout("CFG fail to write nbKeysPri %2x",_cfg.nbKeys);
+        // rewind
+        _cfg.storeOffset-=l;
+        _cfg.nbKeys--;
         return -1;       // no joy
     }
 
