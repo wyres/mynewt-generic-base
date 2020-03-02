@@ -655,18 +655,35 @@ static void execRxRadio(struct os_event* e) {
     log_warn("LW:DRRX TBI");
 }
 
+extern void lorawan_init(void);
 
+
+#if MYNEWT_VAL(SX1272)
 //TODO : move this in board_utils.c
 extern void SX1272IoDeInit( void );
 extern void SX1272AntSwDeInit( void );
-
-extern void lorawan_init(void);
 
 void lorawan_deinit (void)
 {
     SX1272IoDeInit();
     SX1272AntSwDeInit();
 }
+#elif MYNEWT_VAL(SX1262)
+extern void SX126xIoDeInit( void );
+//extern void SX1272AntSwDeInit( void ); No AntSwitch deinit for sx126x to do it as the same way than for 1272 ?
+
+void lorawan_deinit (void)
+{
+    SX126xIoDeInit();
+    //SX1272AntSwDeInit();
+}
+#else
+//TODO Not yet implemented
+void lorawan_deinit (void)
+{
+    //Nothing to do
+}
+#endif
 
 // Callback from low power manager about change of mode - NO LOGS
 static void lp_change(LP_MODE_t prevmode, LP_MODE_t newmode) {
