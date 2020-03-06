@@ -23,14 +23,13 @@ enum LOGS_LEVEL { LOGS_DEBUG, LOGS_INFO, LOGS_RUN, LOGS_OFF };
 // We signal production code with explicit define, not NDEBUG. This is coz NDEBUG
 // removes asserts everywhere (including mynewt etc), and these asserts are generally
 // not just 'test/debug' cases, but also 'badness reboot recovery' cases... 
-// Release code therefore just removes logs and other debug/test code surrounded by #ifndef RELEASE_BUILD/#endif
+// Release code therefore just removes debug logs and other debug/test code surrounded by #ifndef RELEASE_BUILD/#endif
 #if MYNEWT_VAL(BUILD_RELEASE)
 #ifndef RELEASE_BUILD 
 #define RELEASE_BUILD (1)
 #endif
 
 #define log_debug(__s, ...) {do{}while(0);}
-#define log_info(__s, ...) {do{}while(0);}
 #define log_noout(__s, ...) {do{}while(0);}
 #define log_blocking(__s, ...) {do{}while(0);}
 
@@ -41,7 +40,6 @@ enum LOGS_LEVEL { LOGS_DEBUG, LOGS_INFO, LOGS_RUN, LOGS_OFF };
 #endif
 
 #define log_debug log_debug_fn
-#define log_info log_info_fn
 #define log_noout log_noout_fn
 #define log_blocking log_blocking_fn
 
@@ -63,6 +61,8 @@ enum LOGS_LEVEL { LOGS_DEBUG, LOGS_INFO, LOGS_RUN, LOGS_OFF };
     #define assert(__e) ((__e) ? (void)0 : wassert_fn(NULL, 0))
 #endif
 #endif /* NDEBUG */
+// Note: info, warn and error logs are in the image for dev and release, but may not be output depending on log level.
+#define log_info log_info_fn
 #define log_warn log_warn_fn
 #define log_error log_error_fn
 #define log_fn log_fn_fn

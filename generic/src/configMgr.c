@@ -41,6 +41,11 @@ struct cfg {
 //    } indexTable[MAX_KEYS];
 } _cfg;     // all inited to 0 by definition (bss)
 
+static void cfgLockR();
+static void cfgUnlockR();
+static void cfgLockW();
+static void cfgUnlockW();
+
 static int createKey(uint16_t k, uint8_t l, uint8_t* d);
 static int findKeyIdx(uint16_t k);
 static uint16_t getIdxKey(int idx);
@@ -69,7 +74,7 @@ bool CFMgr_registerCB(CFG_CBFN_t cb) {
 // If the key is unknown, it is added to the dictionary and the value is set to that of initdata.
 bool CFMgr_addElementDef(uint16_t key, uint8_t len, void* initdata) {
     bool ret = false;
-    hal_bsp_nvmUnlock();
+    cfgLockR();
     int idx = findKeyIdx(key);
     if (idx>=0) {
         if (getIdxLen(idx) == len) {
@@ -78,7 +83,9 @@ bool CFMgr_addElementDef(uint16_t key, uint8_t len, void* initdata) {
             ret = false;       // exists already but with different len!
         }
     } else {
+        cfgLockW();
         idx = createKey(key, len, (uint8_t*)initdata);
+        cfgUnlockW();
         ret = (idx>=0);
         if (idx<0) {
             log_noout("CFGAE:FAIL CK %4x at idx %d", key, idx);
@@ -86,16 +93,18 @@ bool CFMgr_addElementDef(uint16_t key, uint8_t len, void* initdata) {
             log_noout("CFGAE: CK %4x at idx %d", key, idx);
         }
     }
-    hal_bsp_nvmLock();
+    cfgUnlockR();
     return ret;
 }
 
 bool CFMgr_getOrAddElement(uint16_t key, void* data, uint8_t len) {
     bool ret = false;
-    hal_bsp_nvmUnlock();
+    cfgLockR();
     int idx = findKeyIdx(key);
     if (idx<0) {
+        cfgLockW();
         idx = createKey(key, len, (uint8_t*)data);
+        cfgUnlockW();
         ret = (idx>=0);
         if (idx<0) {
             log_noout("CFGGE:FAIL CK %4x at idx %d", key, idx);
@@ -114,7 +123,7 @@ bool CFMgr_getOrAddElement(uint16_t key, void* data, uint8_t len) {
         }
         ret = hal_bsp_nvmRead(getIdxOff(idx), klen, (uint8_t*)data);
     }
-    hal_bsp_nvmLock();
+    cfgUnlockR();
     return ret;
 }
 
@@ -213,7 +222,7 @@ bool CFMgr_getOrAddElementCheckRangeINT8(uint16_t key, int8_t* data, int8_t min,
 // Returns the actual length of the element returned, or -1 if the key does not exist
 int CFMgr_getElement(uint16_t key, void* data, uint8_t maxlen) {
     int len = 0;
-    hal_bsp_nvmUnlock();
+    cfgLockR();
     int idx = findKeyIdx(key);
     if (idx<0) {
         len = -1;      // no such key
@@ -228,26 +237,28 @@ int CFMgr_getElement(uint16_t key, void* data, uint8_t maxlen) {
             len = -1;      // fail
         }
     }
-    hal_bsp_nvmLock();
+    cfgUnlockR();
     return len;
 }
 uint8_t CFMgr_getElementLen(uint16_t key) {
     uint8_t ret = 0;
-    hal_bsp_nvmUnlock();
+    cfgLockR();
     int idx = findKeyIdx(key);
     if (idx>=0) {
         ret = getIdxLen(idx);
     }
-    hal_bsp_nvmLock();
+    cfgUnlockR();
     return ret;
 }
 // Set an element value. Creates key if unknown if it can
 bool CFMgr_setElement(uint16_t key, void* data, uint8_t len) {
     bool ret = false;
-    hal_bsp_nvmUnlock();
+    cfgLockR();
     int idx = findKeyIdx(key);
     if (idx<0) {
+        cfgLockW();
         idx = createKey(key, len, (uint8_t*)data);
+        cfgUnlockW();
         ret = (idx>=0);
         if (idx<0) {
             log_noout("CFGSE:FAIL CK %4x at idx %d", key, idx);
@@ -258,13 +269,15 @@ bool CFMgr_setElement(uint16_t key, void* data, uint8_t len) {
         uint8_t klen = getIdxLen(idx);
         if (len==klen) {
             // Write data
+            cfgLockW();
             ret = hal_bsp_nvmWrite(getIdxOff(idx), getIdxLen(idx), (uint8_t*)data);
+            cfgUnlockW();
         } else {
             log_noout("CFGSE:FAIL SK %4x at idx %d bad len %d should be %d", key, idx, len, klen);
             ret = false;
         }
     }
-    hal_bsp_nvmLock();
+    cfgUnlockR();
     // Tell cfg listeners if ok
     if (ret) {
         informListeners(key);
@@ -274,7 +287,7 @@ bool CFMgr_setElement(uint16_t key, void* data, uint8_t len) {
 
 bool CFMgr_resetElement(uint16_t key) {
     bool ret = true;
-    hal_bsp_nvmUnlock();
+    cfgLockR();
     int idx = findKeyIdx(key);
     if (idx<0) {
         ret = false;
@@ -282,11 +295,13 @@ bool CFMgr_resetElement(uint16_t key) {
         // Write 0 data
         uint8_t vlen = getIdxLen(idx);
         uint16_t voff = getIdxOff(idx);
+        cfgLockW();
         for(int i=0;i<vlen;i++) {
             ret &= hal_bsp_nvmWrite8(voff + i, 0);      // any failure sets result to failure
         }
+        cfgUnlockW();
     }
-    hal_bsp_nvmLock();
+    cfgUnlockR();
 
     // Tell cfg listeners
     informListeners(key);
@@ -299,9 +314,9 @@ void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb) {
     int key = 0;
     for(int i=0;i<_cfg.nbKeys; i++) {
         // get each key, but ensure NVM in state to allow CB to call other methods
-        hal_bsp_nvmUnlock();
+        cfgLockR();
         key = getIdxKey(i);
-        hal_bsp_nvmLock();
+        cfgUnlockR();
         // if no keymodule filter, or the key has the correct keymodule as its MSB, give it to CB
         if (keymodule==-1 || (key>>8)==keymodule) {
             (*(cb))(key);
@@ -332,13 +347,14 @@ static void informListeners(uint16_t key) {
  * read in Idx, updating StoreOffset at each entry read to be its StoreOff+len.
  */
 void CFMgr_init(void) {
-   // ? neccessary to unlock to READ?
-    hal_bsp_nvmUnlock();
+    cfgLockR();
     uint8_t nbK_pri = hal_bsp_nvmRead8(0);
     uint8_t nbK_sec = hal_bsp_nvmRead8(1);
     if (nbK_sec!=nbK_pri) {
         // oops. can't log yet
         log_noout("PROM cfg store corruption (%d, %d)", nbK_pri, nbK_sec);
+        // log our fn address, and continue. Might be ok...
+        log_fn_fn();
     }
     _cfg.nbKeys = nbK_pri;
     _cfg.indexStart = hal_bsp_nvmRead16(2);
@@ -351,10 +367,14 @@ void CFMgr_init(void) {
         _cfg.indexStart=NVM_HDR_SIZE;
         _cfg.storeStart=_cfg.indexStart + (MAX_KEYS+1)*INDEX_SIZE;
         _cfg.storeOffset = _cfg.storeStart; 
+        cfgLockW();
         hal_bsp_nvmWrite8(0,0);
         hal_bsp_nvmWrite8(1,0);
         hal_bsp_nvmWrite16(2, _cfg.indexStart);
         hal_bsp_nvmWrite16(4, _cfg.storeStart);
+        cfgUnlockW();
+        // just log passage : no assert (as this writes to PROM!)
+        log_fn_fn();
     }
 /*
     // Calculate where next free space in store it while reading the key index into ram
@@ -373,7 +393,7 @@ void CFMgr_init(void) {
         _cfg.storeOffset = getIdxOff(_cfg.nbKeys-1) + getIdxLen(_cfg.nbKeys-1);
     }
 
-    hal_bsp_nvmLock();
+    cfgUnlockR();
 
     // ready to roll
     // debug
@@ -390,7 +410,7 @@ void CFMgr_init(void) {
  * write nbKeys(sec)
  * write nbKeys(pri)
  * Returns index in the table of the new key
- * !! MUST HAVE UNLOCK/LOCK round this call
+ * !! MUST HAVE cfgLockW/cfgUnlockW round this call
  */
 static int createKey(uint16_t k, uint8_t l, uint8_t* d) {
     assert(l!=0);
@@ -448,7 +468,7 @@ static int createKey(uint16_t k, uint8_t l, uint8_t* d) {
 }
 
 // Find the index in the key table for the given key, or -1 if not found
-// * !! MUST HAVE UNLOCK/LOCK round this call
+// * !! No need to UNLOCK to make this call as only READ
 static int findKeyIdx(uint16_t k) {
     assert(k!=CFG_KEY_ILLEGAL);
     for(int i=0;i<_cfg.nbKeys; i++) {
@@ -459,7 +479,7 @@ static int findKeyIdx(uint16_t k) {
     }
     return -1;
 }
-// * !! MUST HAVE UNLOCK/LOCK round this call
+// * !! No need to UNLOCK to make this call as only READ
 static uint16_t getIdxKey(int idx) {
     if (idx<0 || idx>=_cfg.nbKeys) {
         return CFG_KEY_ILLEGAL;
@@ -467,7 +487,7 @@ static uint16_t getIdxKey(int idx) {
     return hal_bsp_nvmRead16(_cfg.indexStart+(idx*INDEX_SIZE));
 
 }
-// * !! MUST HAVE UNLOCK/LOCK round this call
+// * !! No need to UNLOCK to make this call as only READ
 static uint8_t getIdxLen(int idx) {
     if (idx<0 || idx>=_cfg.nbKeys) {
         return 0;
@@ -475,7 +495,7 @@ static uint8_t getIdxLen(int idx) {
     return hal_bsp_nvmRead8(_cfg.indexStart+(idx*INDEX_SIZE)+2);
     
 }
-// * !! MUST HAVE UNLOCK/LOCK round this call
+// * !! No need to UNLOCK to make this call as only READ
 static uint16_t getIdxOff(int idx) {
     if (idx<0 || idx>=_cfg.nbKeys) {
         return 0;
@@ -483,10 +503,29 @@ static uint16_t getIdxOff(int idx) {
     return hal_bsp_nvmRead16(_cfg.indexStart+(idx*INDEX_SIZE)+3);    
 }
 
+// Protect access to PROM
+// Lock for reading only
+static void cfgLockR() {
+    // NOOP currently : add mutex if required
+}
+static void cfgUnlockR() {
+    // NOOP currently : add mutex if required
+}
+// Lock for Writing (and reading). Include PROM protection unlock/lock
+static void cfgLockW() {
+    // No mutex yet
+    // Unlock PROM so can wrtie to it
+    hal_bsp_nvmUnlock();
+}
+static void cfgUnlockW() {
+    // Lock PROM so can't accidently write to it
+    hal_bsp_nvmLock();
+}
+
 #ifndef RELEASE_BUILD
 // DUMP PROM to blocking UART
 void dumpCfg() {
-    hal_bsp_nvmUnlock();
+    cfgLockR();
     uint8_t nbK_pri = hal_bsp_nvmRead8(0);
     uint8_t nbK_sec = hal_bsp_nvmRead8(1);
     log_noout("nbKPri %d, nbKSec %d", nbK_pri, nbK_sec);
@@ -505,8 +544,7 @@ void dumpCfg() {
     for(int i=0; i<nbK_pri;i++) {
         log_noout("idx %d -> key %4x, len %d, offset %4x", i, getIdxKey(i), getIdxLen(i), getIdxOff(i));
     }
-    hal_bsp_nvmLock();
-
+    cfgUnlockR();
 }
 #endif /* RELEASE_BUILD */ 
 #ifdef UNITTEST
