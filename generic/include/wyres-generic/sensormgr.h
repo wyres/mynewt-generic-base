@@ -33,8 +33,10 @@ bool SRMgr_start();
 void SRMgr_stop();
 
 uint32_t SRMgr_getLastButtonTimeSecs();
+// define an IO as a button
+bool SRMgr_defineButton(int8_t io);
 // Register callback to be notified when button changes state (also means button is active during deep sleep)
-bool SRMgr_registerButtonCB(SR_BUTTON_CBFN_t cb, void* ctx);
+bool SRMgr_registerButtonCB(int8_t io, SR_BUTTON_CBFN_t cb, void* ctx);
 // Remove registration - if noone is registered then button state only checked at UL time..
 void SRMgr_unregisterButtonCB(SR_BUTTON_CBFN_t cb);
 
@@ -52,12 +54,12 @@ uint16_t SRMgr_getBatterymV();
 uint8_t SRMgr_getLight();
 uint16_t SRMgr_getADC1mV();
 uint16_t SRMgr_getADC2mV();
-uint8_t SRMgr_getButton();
-bool SRMgr_hasButtonChanged();
-uint8_t SRMgr_getLastButtonPressType();
+uint8_t SRMgr_getButton(int8_t io);
+bool SRMgr_hasButtonChanged(int8_t io);
+uint8_t SRMgr_getLastButtonPressType(int8_t io);
 /* timestamps in ms since boot */
-uint32_t SRMgr_getLastButtonPressTS();
-uint32_t SRMgr_getLastButtonReleaseTS();
+uint32_t SRMgr_getLastButtonPressTS(int8_t io);
+uint32_t SRMgr_getLastButtonReleaseTS(int8_t io);
 bool SRMgr_hasTempChanged();
 bool SRMgr_hasPressureChanged();
 bool SRMgr_hasBattChanged();
@@ -71,7 +73,7 @@ void SRMgr_updateBatt();
 void SRMgr_updateLight();
 void SRMgr_updateADC1();
 void SRMgr_updateADC2();
-void SRMgr_updateButton();
+void SRMgr_updateButton(int8_t io);
 #ifdef __cplusplus
 }
 #endif

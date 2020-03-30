@@ -41,6 +41,7 @@
 #define CHAN_ADC2   (-1)
 
 #define MAX_CBS (4)
+#define MAX_BUTTONS (2)
 
 #define ADC_MAX_VALUE                               4095    // 12 bits max value
 // Should read the factory calibrated vref from the eerom at 0x1FF8 00F8/9
@@ -53,6 +54,17 @@
 static struct {
     LP_ID_t lpUserId;
     struct {
+        int8_t io;
+        uint32_t lastButtonPressTS;         // in ms since boot
+        uint32_t lastButtonReleaseTS;       // in ms since boot
+        uint8_t currButtonState;
+        uint8_t lastButtonState;
+        uint8_t lastButtonPressType;
+        uint8_t lastDebounceButtonState;
+        struct os_callout buttonDebounceTimer;
+    } buttons[MAX_BUTTONS];
+    struct {
+        int8_t io;
         SR_BUTTON_CBFN_t fn;
         void* ctx;
     } buttonCBs[MAX_CBS];
@@ -61,11 +73,6 @@ static struct {
         void* ctx;
     } noiseCBs[MAX_CBS];
     uint32_t lastReadTS;                // in seconds since boot
-    uint32_t lastButtonPressTS;         // in ms since boot
-    uint32_t lastButtonReleaseTS;       // in ms since boot
-    uint8_t currButtonState;
-    uint8_t lastButtonState;
-    uint8_t lastButtonPressType;
     bool isActive;
     int16_t currTempcC;
     uint16_t currBattmV;
@@ -82,15 +89,11 @@ static struct {
     uint16_t currADC2mV;
     uint16_t lastADC1mV;
     uint16_t lastADC2mV;
-    uint8_t lastDebounceButtonState;
-    struct os_callout buttonDebounceTimer;
-} _ctx = {
-    // memset'd all to 0 in init()
-};
+} _ctx;    // memset'd all to 0 in init()
 
 // Timeout for I2C accesses in 'ticks'
 #define I2C_ACCESS_TIMEOUT (100)
-
+static int findButton(int io);
 static void buttonCB(void* arg);
 static bool config();
     // read stuff into current values
@@ -104,12 +107,10 @@ static uint8_t mapButton(int in);
 void SRMgr_init(void) 
 {
     memset(&_ctx, 0, sizeof(_ctx));
-    os_callout_init(&(_ctx.buttonDebounceTimer), os_eventq_dflt_get(), buttonCheckDebounced, &_ctx);
-    if (EXT_BUTTON>=0)
-    {
-        // if ext button is enabled, its IRQ etc runs all the time even during deepsleep
-        GPIO_define_irq("button", EXT_BUTTON, buttonCB, &_ctx, HAL_GPIO_TRIG_BOTH, HAL_GPIO_PULL_UP, LP_DEEPSLEEP, PULL_DOWN); //TODO : double check "PULL_DOWN"
+    for(int i=0;i<MAX_BUTTONS;i++) {
+        _ctx.buttons[i].io = -1;        // no buttons defined yet
     }
+
     // config alti on i2c
     if (ALTI_init() != ALTI_SUCCESS)
     {
@@ -147,18 +148,50 @@ void SRMgr_stop()
     LPMgr_setLPMode(_ctx.lpUserId, LP_DEEPSLEEP);
 }
 
-bool SRMgr_registerButtonCB(SR_BUTTON_CBFN_t cb, void* c) 
+/** Define a gpio as a button, ie with debounce and IRQ execution */
+bool SRMgr_defineButton(int8_t gpio) {
+    if (gpio>=0)
+    {
+        // Find free slot, or if already defined
+        int dispo = -1;
+        for(int i=0;i<MAX_BUTTONS;i++) {
+            if (_ctx.buttons[i].io==gpio) {
+                return true;     // its defined already
+            }
+            if (_ctx.buttons[i].io==-1) {
+                dispo = i;
+            }
+        }
+        if (dispo<0) {
+            return false;       // not defined already and no free slot
+        }
+        _ctx.buttons[dispo].io = gpio;
+        // Event used for button debounces. Note that N button inputs may be used, defined by specific modules by calls to defineButton().
+        os_callout_init(&(_ctx.buttons[dispo].buttonDebounceTimer), os_eventq_dflt_get(), buttonCheckDebounced, (void*)((int)gpio));
+
+        // if a button is enabled, its IRQ etc runs all the time even during deepsleep
+        // Same callback used for all buttons with arg being the gpio for the button
+        GPIO_define_irq("button", gpio, buttonCB, (void*)((int)gpio), HAL_GPIO_TRIG_BOTH, HAL_GPIO_PULL_UP, LP_DEEPSLEEP, PULL_DOWN); //TODO : double check "PULL_DOWN"
+        return true;
+    }
+    return false;
+}
+
+/** Register callback for a button identified by its GPIO */
+bool SRMgr_registerButtonCB(int8_t butio, SR_BUTTON_CBFN_t cb, void* c) 
 {
-    if (EXT_BUTTON>=0) {
+    // Check button io has been defined and define if possible
+    if (SRMgr_defineButton(butio)) {
         for(int i=0;i<MAX_CBS;i++) {
             if (_ctx.buttonCBs[i].fn==NULL) {
+                _ctx.buttonCBs[i].io = butio;
                 _ctx.buttonCBs[i].fn = cb;
                 _ctx.buttonCBs[i].ctx = c;
                 return true;
             }
         }
     }
-    return false;       // no space or no button defined
+    return false;
 }
 void SRMgr_unregisterButtonCB(SR_BUTTON_CBFN_t cb) 
 {
@@ -207,32 +240,56 @@ void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb)
     }
 }
 
-bool SRMgr_hasButtonChanged() 
+bool SRMgr_hasButtonChanged(int8_t io) 
 {
-    return (_ctx.currButtonState != _ctx.lastButtonState);
+    int bid = findButton(io);
+    if (bid>=0) {
+        return (_ctx.buttons[bid].currButtonState != _ctx.buttons[bid].lastButtonState);
+    } 
+    return false;
 }
-uint8_t SRMgr_getButton() 
+uint8_t SRMgr_getButton(int8_t io) 
 {
     readEnv();
-    return _ctx.currButtonState;
+    int bid = findButton(io);
+    if (bid>=0) {
+        return _ctx.buttons[bid].currButtonState;
+    } 
+    return SR_BUTTON_RELEASED;
 }
-void SRMgr_updateButton() 
+void SRMgr_updateButton(int8_t io) 
 {
     readEnv();
-    _ctx.lastButtonState = _ctx.currButtonState;
+    int bid = findButton(io);
+    if (bid>=0) {
+        _ctx.buttons[bid].lastButtonState = _ctx.buttons[bid].currButtonState;
+    } 
 }
-uint8_t SRMgr_getLastButtonPressType() 
+uint8_t SRMgr_getLastButtonPressType(int8_t io) 
 {
-    return _ctx.lastButtonPressType;
+    int bid = findButton(io);
+    if (bid>=0) {
+        return _ctx.buttons[bid].lastButtonPressType;
+    } 
+    return SR_BUTTON_SHORT;
 }
-uint32_t SRMgr_getLastButtonPressTS() 
+uint32_t SRMgr_getLastButtonPressTS(int8_t io) 
 {
-    return _ctx.lastButtonPressTS;
+    int bid = findButton(io);
+    if (bid>=0) {
+        return _ctx.buttons[bid].lastButtonPressTS;
+    } 
+    return 0;
 }
-uint32_t SRMgr_getLastButtonReleaseTS() 
+uint32_t SRMgr_getLastButtonReleaseTS(int8_t io) 
 {
-    return _ctx.lastButtonReleaseTS;
+    int bid = findButton(io);
+    if (bid>=0) {
+        return _ctx.buttons[bid].lastButtonReleaseTS;
+    } 
+    return 0;
 }
+
 bool SRMgr_hasTempChanged() 
 {
     readEnv();      // ensure uptodate
@@ -345,6 +402,15 @@ void SRMgr_updateADC2()
 }
 
 // internals
+//buttons
+static int findButton(int io) {
+    for(int i=0;i<MAX_BUTTONS;i++) {
+        if (_ctx.buttons[i].io == io) {
+            return i;
+        }
+    }
+    return -1;      // not found
+}
 static SR_BUTTON_PRESS_TYPE_t calcButtonPressType(uint32_t durms) 
 {
     if (durms<2000) 
@@ -361,53 +427,64 @@ static SR_BUTTON_PRESS_TYPE_t calcButtonPressType(uint32_t durms)
     }
     return SR_BUTTON_VLONG;
 }
+static uint8_t mapButton(int in) 
+{
+    // gpio input is 0 when pressed, 1 when released; map to 0 for release, 1 for pressed
+    return (in>0 ? SR_BUTTON_RELEASED : SR_BUTTON_PRESSED);
+}
+
 // CB called each time button changes state
+// Arg is the io of the gpio
 static void buttonCB(void* arg) 
 {
-    // we just schedule a timeout for in 100ms to check new state (debounce) IFF its not already scheduled
-    if (os_callout_queued(&_ctx.buttonDebounceTimer) == false) 
-    {
-        _ctx.lastDebounceButtonState = _ctx.currButtonState;        // record the button state before first transition
-        os_callout_reset(&_ctx.buttonDebounceTimer, OS_TICKS_PER_SEC/10);
-    } // else ignore
+    int bid = findButton((int)arg);
+    if (bid>=0) {
+        // we just schedule a timeout for in 100ms to check new state (debounce) IFF its not already scheduled
+        if (os_callout_queued(&_ctx.buttons[bid].buttonDebounceTimer) == false) 
+        {
+            _ctx.buttons[bid].lastDebounceButtonState = _ctx.buttons[bid].currButtonState;        // record the button state before first transition
+            os_callout_reset(&_ctx.buttons[bid].buttonDebounceTimer, OS_TICKS_PER_SEC/10);
+        } // else ignore
+    }
 }
 
 // Called 100ms after first change of button state. Check the state now that it has settled
 static void buttonCheckDebounced(struct os_event* e) 
 {
-    if (EXT_BUTTON<0) {
-        return;
-    }
-
-    // Read the button state NOW
-    _ctx.currButtonState = mapButton(GPIO_read(EXT_BUTTON));
-    // And compare to when it first changed - only if its still different will we deal with it
-    if (_ctx.currButtonState != _ctx.lastDebounceButtonState) 
-    {
-        // Manage "short press", "2s press", "5s press", "10s press" etc
-        if (_ctx.currButtonState==SR_BUTTON_PRESSED) 
+    // Check which button we're dealing with ('arg' is the gpio of the button for thie event)
+    int bid = findButton((int)(e->ev_arg));
+    if (bid>=0) {
+        // Read the button state NOW
+        _ctx.buttons[bid].currButtonState = mapButton(GPIO_read(_ctx.buttons[bid].io));
+        // And compare to when it first changed - only if its still different will we deal with it
+        if (_ctx.buttons[bid].currButtonState != _ctx.buttons[bid].lastDebounceButtonState) 
         {
-            // Pressed
-            _ctx.lastButtonPressTS = TMMgr_getRelTimeMS();
-            // TODO start timer to do on-going button press length checks (ie signal 'long press' while not yet released)
-
-        } 
-        else 
-        {
-            // released
-            _ctx.lastButtonReleaseTS = TMMgr_getRelTimeMS();
             // Manage "short press", "2s press", "5s press", "10s press" etc
-            _ctx.lastButtonPressType = calcButtonPressType(_ctx.lastButtonReleaseTS - _ctx.lastButtonPressTS);
-        }
-        // call callbacks
-        for(int i=0;i<MAX_CBS;i++) 
-        {
-            if (_ctx.buttonCBs[i].fn!=NULL) 
+            if (_ctx.buttons[bid].currButtonState==SR_BUTTON_PRESSED) 
             {
-                (*(_ctx.buttonCBs[i].fn))(_ctx.buttonCBs[i].ctx, _ctx.currButtonState, calcButtonPressType(TMMgr_getRelTimeMS() - _ctx.lastButtonPressTS));
+                // Pressed
+                _ctx.buttons[bid].lastButtonPressTS = TMMgr_getRelTimeMS();
+                // TODO start timer to do on-going button press length checks (ie signal 'long press' while not yet released)
+
+            } 
+            else 
+            {
+                // released
+                _ctx.buttons[bid].lastButtonReleaseTS = TMMgr_getRelTimeMS();
+                // Manage "short press", "2s press", "5s press", "10s press" etc
+                _ctx.buttons[bid].lastButtonPressType = calcButtonPressType(_ctx.buttons[bid].lastButtonReleaseTS - _ctx.buttons[bid].lastButtonPressTS);
             }
-        }
-    } // else it toggled but settled into same state as before -> no transition
+            // call callbacks
+            for(int i=0;i<MAX_CBS;i++) 
+            {
+                if (_ctx.buttonCBs[i].fn!=NULL) 
+                {
+                    (*(_ctx.buttonCBs[i].fn))(_ctx.buttonCBs[i].ctx, _ctx.buttons[bid].currButtonState, 
+                            calcButtonPressType(TMMgr_getRelTimeMS() - _ctx.buttons[bid].lastButtonPressTS));
+                }
+            }
+        } // else it toggled but settled into same state as before -> no transition
+    }
 }
 static bool config() 
 {
@@ -456,9 +533,10 @@ static bool readEnv()
     {
         _ctx.lastReadTS = TMMgr_getRelTimeSecs();
 
-        if (EXT_BUTTON>=0) 
-        {
-            _ctx.currButtonState = mapButton(GPIO_read(EXT_BUTTON));
+        for(int i=0;i<MAX_BUTTONS;i++) {
+            if (_ctx.buttons[i].io>=0) {
+                _ctx.buttons[i].currButtonState = mapButton(GPIO_read(_ctx.buttons[i].io));
+            }
         }
         if (BATTERY_GPIO>=0) 
         {
@@ -558,8 +636,3 @@ static uint32_t delta(int a, int b)
     return (uint32_t)(b-a);
 }
 
-static uint8_t mapButton(int in) 
-{
-    // gpio input is 0 when pressed, 1 when released; map to 0 for release, 1 for pressed
-    return (in>0 ? SR_BUTTON_RELEASED : SR_BUTTON_PRESSED);
-}
