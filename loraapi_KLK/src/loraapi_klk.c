@@ -429,9 +429,36 @@ static bool checkRadio() {
 }
 */
 
+static int8_t mapPowerDb2PowerLevel(int8_t db) {
+    // 868MHz : 0=highest, 1=14, 2=11, 3=8, 4=5, 5=2...
+    // MApping from dbM to power level is regional dependant...
+    int8_t txPowerLevel = ((14-db)/2);
+    // Ensure not negative (eg for >14dm permitted regions)
+    if (txPowerLevel<0) {
+        txPowerLevel = 0;
+    }
+    return txPowerLevel;
+}
 // TODO use stack regional params functions to find max pkt size per SF per region
 static uint8_t maxSz4SF(int sf) {
-    return 52;
+    switch(sf) {
+        case LORAWAN_SF12: 
+            return 52;
+        case LORAWAN_SF11: 
+            return 52;
+        case LORAWAN_SF10: 
+            return 52;
+        case LORAWAN_SF9: 
+            return 98;
+        case LORAWAN_SF8: 
+            return 98;
+        case LORAWAN_SF7: 
+            return 250;
+        case LORAWAN_FSK250: 
+            return 250;
+        default:
+            return 52;
+    }
 }
 
 static int mapSF2DR(int sf) {
@@ -478,7 +505,7 @@ static bool configTxSocket(lorawan_sock_t skt, bool useAck, LORAWAN_SF_t sf, int
         ret = false;
     }
     mib.Type = LORAWAN_ATTR_CHANNELS_TX_POWER;
-    mib.Param.ChannelsDefaultTxPower = ((14-txPower)/2);        // lorawan stack power does 0-7, no one knows why
+    mib.Param.ChannelsDefaultTxPower = mapPowerDb2PowerLevel(txPower);        // lorawan stack power does 0-7, coz its in the original spec
     status = lorawan_setsockopt(skt, &mib);
     if (status != LORAWAN_STATUS_OK) {
         log_warn("LW:NOK set tx power");
@@ -762,8 +789,10 @@ void lora_api_init(uint8_t* devEUI, uint8_t* appEUI, uint8_t* appKey, bool enabl
 
     // Ok, ready to setup KLK Lorawan wrapper. In theory could do this in lorawan_join()? but then gotta deal with re-joins etc...
     uint8_t nb_rep = 1;
-    // Note that the txPower is set for each individual tx. Note also that the KLK code expects it as a 'power level' which is not directly the XdBm everyone uses...
-    int status = lorawan_configure_OTAA(_loraCtx.deveui, _loraCtx.appeui, _loraCtx.appkey, nb_rep, ((14-_loraCtx.defaultLWPower)/2), lora_api_getCurrentRegion());
+    // Note that the txPower is set for each individual tx. 
+    // Note also that the KLK code expects it as a 'power level' which is not directly the XdBm everyone uses... (see table 7.1.3)
+    int status = lorawan_configure_OTAA(_loraCtx.deveui, _loraCtx.appeui, _loraCtx.appkey, nb_rep, 
+            mapPowerDb2PowerLevel(_loraCtx.defaultLWPower), lora_api_getCurrentRegion());
     assert(status == LORAWAN_STATUS_OK);
 //    } else {
 //        int status = lorawan_configure_ABP(_loraCfg.devAddr, _loraCfg.nwkSkey, _loraCfg.appSkey, nb_rep, ((14-_loraCfg.defaultLWPower)/2), lora_api_getCurrentRegion());

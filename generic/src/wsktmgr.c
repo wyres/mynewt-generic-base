@@ -42,6 +42,14 @@ static void freeSocket(wskt_t* s);
 void wskt_registerDevice(const char* device_name, wskt_devicefns_t* dfns, void* dcfg) {
     assert(_devRegIdx<MAX_WSKT_DEVICES);
     assert(device_name!=NULL);
+    // check if already created and assert, as this is an error (can't have same name and 2 different configs)
+    for(int i=0;i<_devRegIdx;i++) {
+        if (strncmp(device_name, _devices[i].dname, MAX_WKST_DNAME_SZ)==0) {
+            // Can't log to uart in here, but can put it in buffer for debugger
+            log_noout("double reg of wskt device %s",device_name);
+            assert(0);      // badness in code
+        }
+    }
     wskt_device_t* dev = &_devices[_devRegIdx++];        // MEMPOOL
     strncpy(dev->dname, device_name, MAX_WKST_DNAME_SZ-1);
     dev->dname[MAX_WKST_DNAME_SZ-1]= '\0';

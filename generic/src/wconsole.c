@@ -95,7 +95,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
             // initialise comms to the gps via the uart like comms device defined in syscfg
             ctx->cnx = wskt_open(ctx->uartDevice, &ctx->myUARTEvent, os_eventq_dflt_get());
             if (ctx->cnx==NULL) {
-                log_debug("CN: Failed to get uart exclusive!");
+                log_debug("CN: Failed to open uart[%s]!", ctx->uartDevice);
                 sm_sendEvent(ctx->mySMId, ME_CN_UART_NOK, NULL);
                 return SM_STATE_CURRENT;
             }
@@ -110,7 +110,7 @@ static SM_STATE_ID_t State_StartingComm(void* arg, int e, void* data) {
         }
         case ME_CN_UART_NOK: {
             // ooops, we didnt get our exclusive access...
-            log_debug("CN: uart access failed");
+            log_debug("CN: uart[%s] access failed", ctx->uartDevice);
             return MS_IDLE;
         }
         case ME_CN_UART_OK: {

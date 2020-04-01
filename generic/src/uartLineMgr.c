@@ -98,6 +98,12 @@ bool uart_line_comm_create(char* dname, uint32_t baud) {
         log_uartbdg("too many uart creates");
         return false;
     }
+    // check if already created and ignore
+    for(int i=0;i<_nbUARTCfgs;i++) {
+        if (strncmp(dname, _cfgs[i].dname, MAX_WKST_DNAME_SZ)==0) {
+            return true;        // its ok
+        }
+    }
     struct UARTDeviceCfg* myCfg = &_cfgs[_nbUARTCfgs++];
     strncpy(myCfg->dname, dname, MAX_WKST_DNAME_SZ-1);
     myCfg->dname[MAX_WKST_DNAME_SZ-1]= '\0';
