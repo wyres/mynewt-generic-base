@@ -32,7 +32,7 @@ syscfg.defs:
         value: 3
     MAX_WSKTS:
         description: "max open simultaneous sockets"
-        value: 32
+        value: 8
     MAX_WSKT_DEVICES:
         description: "max wskt managed devices"
         value: 8
@@ -41,7 +41,7 @@ syscfg.defs:
         value: 8
     MAX_MMCBFNS:
         description: "max movement cbs"
-        value: 8
+        value: 4
     WSKT_BUF_SZ:
         description: "size of buffers used for RX in wskts"
         value: 256
