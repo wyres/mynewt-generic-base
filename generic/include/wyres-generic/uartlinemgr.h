@@ -25,7 +25,7 @@ extern "C" {
 #define UART_LINE_SZ (WSKT_BUF_SZ)
 
 // Create a device for a line access to UART
-bool uart_line_comm_create(char* dname, uint32_t baudrate);
+bool uart_line_comm_create(const char* dname, uint32_t baudrate);
 
 #ifdef __cplusplus
 }

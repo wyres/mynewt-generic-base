@@ -41,7 +41,7 @@
 #define CR (0x0D)
 
 static struct UARTDeviceCfg {
-    char dname[MAX_WKST_DNAME_SZ];
+    const char* dname;
     struct os_dev* uartDev;
     uint32_t baud;
     uint8_t rxBuff_data_space[UART_LINE_SZ+1];
@@ -92,7 +92,7 @@ void uart_line_comm_init(void) {
 }
 
 // Create uart device with given name (used as my dev name and also the mynewt device to open), at given baud rate
-bool uart_line_comm_create(char* dname, uint32_t baud) {
+bool uart_line_comm_create(const char* dname, uint32_t baud) {
     // allocate new device cfg element
     if (_nbUARTCfgs>=MAX_NB_UARTS) {
         log_uartbdg("too many uart creates");
@@ -105,8 +105,7 @@ bool uart_line_comm_create(char* dname, uint32_t baud) {
         }
     }
     struct UARTDeviceCfg* myCfg = &_cfgs[_nbUARTCfgs++];
-    strncpy(myCfg->dname, dname, MAX_WKST_DNAME_SZ-1);
-    myCfg->dname[MAX_WKST_DNAME_SZ-1]= '\0';
+    myCfg->dname = dname;
     myCfg->baud = baud;
     circ_bbuf_init(&myCfg->rxBuff, &(myCfg->rxBuff_data_space[0]), UART_LINE_SZ+1);
     circ_bbuf_init(&myCfg->txBuff, &(myCfg->txBuff_data_space[0]), UART_LINE_SZ+1);
