@@ -18,7 +18,7 @@
 #include "hal/hal_system.h"
 #include "hal/hal_watchdog.h"
 #include "mcu/stm32_hal.h"
-#include "bsp.h"
+#include "bsp/bsp.h"
 
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/configmgr.h"

@@ -204,7 +204,7 @@ static void led_mgr_task(void* arg) {
     // Handle a list of requests for specific led blink pattern on a specific led to be started/stopped
     // these requests are dealt with in the task below in order
 
-    int timeslice = 0;
+    int timeslice = -1;
 
     while (1) {
         timeslice = (timeslice+1) % (MAX_PATTERN_SECS*LED_SLICES_PER_SEC);       // 100ms slice within the 2 seconds
