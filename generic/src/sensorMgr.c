@@ -53,7 +53,7 @@
 // store values in between checks
 static struct {
     LP_ID_t lpUserId;
-    struct {
+    struct button_cfg {
         int8_t io;
         uint32_t lastButtonPressTS;         // in ms since boot
         uint32_t lastButtonReleaseTS;       // in ms since boot
@@ -93,7 +93,7 @@ static struct {
 
 // Timeout for I2C accesses in 'ticks'
 #define I2C_ACCESS_TIMEOUT (100)
-static int findButton(int io);
+static struct button_cfg* findButton(int io);
 static void buttonCB(void* arg);
 static bool config();
     // read stuff into current values
@@ -242,50 +242,50 @@ void SRMgr_unregisterNoiseCB(SR_NOISE_CBFN_t cb)
 
 bool SRMgr_hasButtonChanged(int8_t io) 
 {
-    int bid = findButton(io);
-    if (bid>=0) {
-        return (_ctx.buttons[bid].currButtonState != _ctx.buttons[bid].lastButtonState);
+    struct button_cfg* bcfg = findButton((int)io);
+    if (bcfg!=NULL) {
+        return (bcfg->currButtonState != bcfg->lastButtonState);
     } 
     return false;
 }
 uint8_t SRMgr_getButton(int8_t io) 
 {
     readEnv();
-    int bid = findButton(io);
-    if (bid>=0) {
-        return _ctx.buttons[bid].currButtonState;
+    struct button_cfg* bcfg = findButton((int)io);
+    if (bcfg!=NULL) {
+        return bcfg->currButtonState;
     } 
     return SR_BUTTON_RELEASED;
 }
 void SRMgr_updateButton(int8_t io) 
 {
     readEnv();
-    int bid = findButton(io);
-    if (bid>=0) {
-        _ctx.buttons[bid].lastButtonState = _ctx.buttons[bid].currButtonState;
+    struct button_cfg* bcfg = findButton((int)io);
+    if (bcfg!=NULL) {
+        bcfg->lastButtonState = bcfg->currButtonState;
     } 
 }
 uint8_t SRMgr_getLastButtonPressType(int8_t io) 
 {
-    int bid = findButton(io);
-    if (bid>=0) {
-        return _ctx.buttons[bid].lastButtonPressType;
+    struct button_cfg* bcfg = findButton((int)io);
+    if (bcfg!=NULL) {
+        return bcfg->lastButtonPressType;
     } 
     return SR_BUTTON_SHORT;
 }
 uint32_t SRMgr_getLastButtonPressTS(int8_t io) 
 {
-    int bid = findButton(io);
-    if (bid>=0) {
-        return _ctx.buttons[bid].lastButtonPressTS;
+    struct button_cfg* bcfg = findButton((int)io);
+    if (bcfg!=NULL) {
+        return bcfg->lastButtonPressTS;
     } 
     return 0;
 }
 uint32_t SRMgr_getLastButtonReleaseTS(int8_t io) 
 {
-    int bid = findButton(io);
-    if (bid>=0) {
-        return _ctx.buttons[bid].lastButtonReleaseTS;
+    struct button_cfg* bcfg = findButton((int)io);
+    if (bcfg!=NULL) {
+        return bcfg->lastButtonReleaseTS;
     } 
     return 0;
 }
@@ -403,13 +403,13 @@ void SRMgr_updateADC2()
 
 // internals
 //buttons
-static int findButton(int io) {
+static struct button_cfg* findButton(int io) {
     for(int i=0;i<MAX_BUTTONS;i++) {
         if (_ctx.buttons[i].io == io) {
-            return i;
+            return &_ctx.buttons[i];
         }
     }
-    return -1;      // not found
+    return NULL;      // not found
 }
 static SR_BUTTON_PRESS_TYPE_t calcButtonPressType(uint32_t durms) 
 {
@@ -437,13 +437,13 @@ static uint8_t mapButton(int in)
 // Arg is the io of the gpio
 static void buttonCB(void* arg) 
 {
-    int bid = findButton((int)arg);
-    if (bid>=0) {
+    struct button_cfg* bcfg = findButton((int)arg);
+    if (bcfg!=NULL) {
         // we just schedule a timeout for in 100ms to check new state (debounce) IFF its not already scheduled
-        if (os_callout_queued(&_ctx.buttons[bid].buttonDebounceTimer) == false) 
+        if (os_callout_queued(&bcfg->buttonDebounceTimer) == false) 
         {
-            _ctx.buttons[bid].lastDebounceButtonState = _ctx.buttons[bid].currButtonState;        // record the button state before first transition
-            os_callout_reset(&_ctx.buttons[bid].buttonDebounceTimer, OS_TICKS_PER_SEC/10);
+            bcfg->lastDebounceButtonState = bcfg->currButtonState;        // record the button state before first transition
+            os_callout_reset(&bcfg->buttonDebounceTimer, OS_TICKS_PER_SEC/10);
         } // else ignore
     }
 }
@@ -452,35 +452,36 @@ static void buttonCB(void* arg)
 static void buttonCheckDebounced(struct os_event* e) 
 {
     // Check which button we're dealing with ('arg' is the gpio of the button for thie event)
-    int bid = findButton((int)(e->ev_arg));
-    if (bid>=0) {
+    struct button_cfg* bcfg = findButton((int)(e->ev_arg));
+    if (bcfg!=NULL) {
         // Read the button state NOW
-        _ctx.buttons[bid].currButtonState = mapButton(GPIO_read(_ctx.buttons[bid].io));
+        bcfg->currButtonState = mapButton(GPIO_read(bcfg->io));
         // And compare to when it first changed - only if its still different will we deal with it
-        if (_ctx.buttons[bid].currButtonState != _ctx.buttons[bid].lastDebounceButtonState) 
+        if (bcfg->currButtonState != bcfg->lastDebounceButtonState) 
         {
             // Manage "short press", "2s press", "5s press", "10s press" etc
-            if (_ctx.buttons[bid].currButtonState==SR_BUTTON_PRESSED) 
+            if (bcfg->currButtonState==SR_BUTTON_PRESSED) 
             {
                 // Pressed
-                _ctx.buttons[bid].lastButtonPressTS = TMMgr_getRelTimeMS();
+                bcfg->lastButtonPressTS = TMMgr_getRelTimeMS();
                 // TODO start timer to do on-going button press length checks (ie signal 'long press' while not yet released)
 
             } 
             else 
             {
                 // released
-                _ctx.buttons[bid].lastButtonReleaseTS = TMMgr_getRelTimeMS();
+                bcfg->lastButtonReleaseTS = TMMgr_getRelTimeMS();
                 // Manage "short press", "2s press", "5s press", "10s press" etc
-                _ctx.buttons[bid].lastButtonPressType = calcButtonPressType(_ctx.buttons[bid].lastButtonReleaseTS - _ctx.buttons[bid].lastButtonPressTS);
+                bcfg->lastButtonPressType = calcButtonPressType(bcfg->lastButtonReleaseTS - bcfg->lastButtonPressTS);
             }
             // call callbacks
             for(int i=0;i<MAX_CBS;i++) 
             {
-                if (_ctx.buttonCBs[i].fn!=NULL) 
+                // If callback defined and its for the io that caused event, then call it
+                if (_ctx.buttonCBs[i].fn!=NULL && _ctx.buttonCBs[i].io==bcfg->io) 
                 {
-                    (*(_ctx.buttonCBs[i].fn))(_ctx.buttonCBs[i].ctx, _ctx.buttons[bid].currButtonState, 
-                            calcButtonPressType(TMMgr_getRelTimeMS() - _ctx.buttons[bid].lastButtonPressTS));
+                    (*(_ctx.buttonCBs[i].fn))(_ctx.buttonCBs[i].ctx, bcfg->currButtonState, 
+                            calcButtonPressType(TMMgr_getRelTimeMS() - bcfg->lastButtonPressTS));
                 }
             }
         } // else it toggled but settled into same state as before -> no transition
