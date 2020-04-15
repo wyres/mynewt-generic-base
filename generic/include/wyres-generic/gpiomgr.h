@@ -27,7 +27,8 @@ extern "C" {
 */
 #define GPIO_NAME_SZ    (7)
 typedef enum  { GPIO_OUT, GPIO_IN, GPIO_IRQ, GPIO_ADC } GPIO_TYPE;
-typedef enum  { HIGH_Z, PULL_UP, PULL_DOWN, OUT_1, OUT_0 } GPIO_IDLE_TYPE;
+// pull type for when in low power
+typedef enum  { HIGH_Z=HAL_GPIO_PULL_NONE, PULL_DOWN=HAL_GPIO_PULL_DOWN, PULL_UP=HAL_GPIO_PULL_UP, OUT_1, OUT_0 } GPIO_IDLE_TYPE;
 
 /**
  *  gpio creation mirrors hal calls with extra info

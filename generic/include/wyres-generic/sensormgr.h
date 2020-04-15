@@ -21,7 +21,7 @@ extern "C" {
 
 // Generic callback to signal something changed (what depends on registration!)
 typedef enum { SR_BUTTON_RELEASED=0, SR_BUTTON_PRESSED=1} SR_BUTTON_STATE_t;
-typedef enum { SR_BUTTON_SHORT, SR_BUTTON_MED, SR_BUTTON_LONG, SR_BUTTON_VLONG } SR_BUTTON_PRESS_TYPE_t;
+typedef enum { SR_BUTTON_NO_PRESS=0, SR_BUTTON_SHORT, SR_BUTTON_MED, SR_BUTTON_LONG, SR_BUTTON_VLONG } SR_BUTTON_PRESS_TYPE_t;
 typedef void (*SR_BUTTON_CBFN_t)(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType);
 
 typedef void (*SR_NOISE_CBFN_t)(void* ctx, int noiseFreq, int noiseDBm);
