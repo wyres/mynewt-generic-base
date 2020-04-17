@@ -25,10 +25,17 @@
 #include "wyres-generic/rebootmgr.h"
 #include "wyres-generic/timemgr.h"
 
+// The max watchdog timeout this MCU can support
+// 28s for STM32
+#define MAX_MCU_WATCHDOG_SECS (28)          
+
 // Led task should be high pri as does very little but wants to do it in real time
 #define WATCHDOG_TASK_PRIO       MYNEWT_VAL(WATCHDOG_TASK_PRIO)
 #define WATCHDOG_TASK_STACK_SZ   OS_STACK_ALIGN(64)
-#define WATCHDOG_TIMEOUT_SECS (5*60)        // 5 minutes watchdog 
+// Select watchog timeout based on requested type
+#define WATCHDOG_TIMEOUT_SECS   (MYNEWT_VAL(WATCHDOG_TIMEOUT_TYPE)==0?\
+                                    0:(MYNEWT_VAL(WATCHDOG_TIMEOUT_TYPE)==1?\
+                                    (MAX_MCU_WATCHDOG_SECS-1):MYNEWT_VAL(WATCHDOG_TIMEOUT_MINS)*60))
 
 #define REBOOT_LIST_SZ  (8)
 #define FN_LIST_SZ  (8*8)   // for 8 entries, each of 2 uint32_ts
@@ -215,13 +222,15 @@ static void app_watchdog_timeoutcb(struct os_event *d) {
 void RMMgr_watchdog_init(uint32_t timeoutsecs) {
     _awctx.isEnabled = false;
     _awctx.timeoutMS = timeoutsecs*1000;
+    if (timeoutsecs==0) {
+        return;     // 0 means disabled 
+    }
     // Create task to tickle watchdog from default task
     os_task_init(&_awctx.watchdog_task_str, "watchdog", &watchdog_task, NULL, WATCHDOG_TASK_PRIO,
                  OS_WAIT_FOREVER, _awctx.watchdog_task_stack, WATCHDOG_TASK_STACK_SZ);
     // deal with watchdog here if OS not doing to (interval at 0 means app responsible)
-    // If the watchdog is set to <28s we can use the STM32 internal watchdog timer (which is very low level and robust)
-    if (WATCHDOG_TIMEOUT_SECS < 28) {
-        // TODO replace with system level watchdog due to the 28s max timeout limit
+    // If the watchdog is set to less than the MCU max we can use the MCU internal watchdog timer (which is very low level and robust)
+    if (timeoutsecs < MAX_MCU_WATCHDOG_SECS) {
         // init watchdog
         hal_watchdog_init(_awctx.timeoutMS);       // 28s is the max...
     } else {
@@ -232,26 +241,37 @@ void RMMgr_watchdog_init(uint32_t timeoutsecs) {
     RMMgr_watchdog_enable();       
 }
 void RMMgr_watchdog_enable() {
-    if (WATCHDOG_TIMEOUT_SECS < 28) {
-        // TODO replace with system level watchdog due to the 28s max timeout limit
-        // init watchdog
-        hal_watchdog_init(WATCHDOG_TIMEOUT_SECS*1000);       // 28s is the max...
-        // and start it
+    if (_awctx.timeoutMS==0) {
+        return;         // ignore
+    }
+    // Are we using MCU or OS timer watchdogs?
+    if (_awctx.timeoutMS < (MAX_MCU_WATCHDOG_SECS*1000)) {
+        // start it
         hal_watchdog_enable();       
     } else {
+        // Enable os timer watchdog
         _awctx.isEnabled = true;
     }
 }
 void RMMgr_watchdog_disable() {
-    if (WATCHDOG_TIMEOUT_SECS < 28) {
-        // oops cant do that
+    if (_awctx.timeoutMS==0) {
+        return;         // ignore
+    }
+    // Are we using MCU or OS timer watchdogs?
+    if (_awctx.timeoutMS < (MAX_MCU_WATCHDOG_SECS*1000)) {
+        // oops cant do that - ensure we know...
+        assert(0);
     } else {
         _awctx.isEnabled = false;
     }
 }
 /** update watchdog */
 void RMMgr_watchdog_tickle() {
-    if (WATCHDOG_TIMEOUT_SECS < 28) {
+    if (_awctx.timeoutMS==0) {
+        return;         // ignore
+    }
+    // Are we using MCU or OS timer watchdogs?
+    if (_awctx.timeoutMS < (MAX_MCU_WATCHDOG_SECS*1000)) {
         hal_watchdog_tickle();
     } else {
         _awctx.last_tickleTS = TMMgr_getRelTimeSecs();

@@ -126,6 +126,24 @@ void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offm
     return p;
 
 }
+
+// Create PWM on a GPIO (caller must ensure hw compatibility between GPIO chosen and PWM blocks)
+void* GPIO_define_pwm(const char* name, int8_t pin, int pwm_chan, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype) {
+    // already setup?
+    GPIO_t* p = allocGPIO(pin);
+    if (p!=NULL) {
+
+        strncpy(p->name, name, GPIO_NAME_SZ);
+        p->type = GPIO_PWM;
+        p->lpmode = offmode;
+        p->lptype = offtype;
+        p->lpEnabled = true;        // assume pin is alive in current lp mode!
+        p->adc_chan = pwm_chan;     // TODO
+        init_hal(p);
+    }
+    return p;
+}
+
 void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handler, void * arg, hal_gpio_irq_trig_t trig, hal_gpio_pull_t pull, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype) {
     // already setup?
     GPIO_t* p = allocGPIO(pin);
@@ -183,6 +201,17 @@ int GPIO_write(int8_t pin, int val) {
         hal_gpio_write(p->pin, p->value);
         // should re-read the value?
         p->value = hal_gpio_read(p->pin);
+    }
+    return p->value;
+}
+int GPIO_writePWM(int8_t pin, int val) {
+    GPIO_t* p = findGPIO(pin);
+    assert(p!=NULL);
+    assert(p->type==GPIO_PWM);
+    p->value = val;
+    if (p->lpEnabled) {
+        // TODO
+        hal_gpio_write(p->pin, p->value);
     }
     return p->value;
 }
@@ -285,6 +314,11 @@ static void init_hal(GPIO_t* p) {
     if (p->lpEnabled) {
         switch (p->type) {
             case GPIO_OUT: {
+                hal_gpio_init_out(p->pin, p->value);
+                break;
+            }
+            case GPIO_PWM: {
+                // TODO
                 hal_gpio_init_out(p->pin, p->value);
                 break;
             }

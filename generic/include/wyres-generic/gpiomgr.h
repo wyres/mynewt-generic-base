@@ -26,7 +26,7 @@ extern "C" {
  Manage GPIOs centrally to be able to deal with low power enter/exit
 */
 #define GPIO_NAME_SZ    (7)
-typedef enum  { GPIO_OUT, GPIO_IN, GPIO_IRQ, GPIO_ADC } GPIO_TYPE;
+typedef enum  { GPIO_OUT, GPIO_IN, GPIO_IRQ, GPIO_ADC, GPIO_PWM } GPIO_TYPE;
 // pull type for when in low power
 typedef enum  { HIGH_Z=HAL_GPIO_PULL_NONE, PULL_DOWN=HAL_GPIO_PULL_DOWN, PULL_UP=HAL_GPIO_PULL_UP, OUT_1, OUT_0 } GPIO_IDLE_TYPE;
 
@@ -37,6 +37,7 @@ typedef enum  { HIGH_Z=HAL_GPIO_PULL_NONE, PULL_DOWN=HAL_GPIO_PULL_DOWN, PULL_UP
 void* GPIO_define_out(const char* name, int8_t pin, uint8_t initialvalue, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype);
 void* GPIO_define_in(const char* name, int8_t pin,  hal_gpio_pull_t pull, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype);
 void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype);
+void* GPIO_define_pwm(const char* name, int8_t pin, int pwm_chan, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype);
 void* GPIO_define_irq(const char* name, int8_t pin, hal_gpio_irq_handler_t handler, void * arg, hal_gpio_irq_trig_t trig, hal_gpio_pull_t pull, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype);
 
 /** 
@@ -48,6 +49,7 @@ void GPIO_irq_enable(int8_t pin);
 void GPIO_irq_disable(int8_t pin);
 
 int GPIO_write(int8_t pin, int val);
+int GPIO_writePWM(int8_t pin, int val);
 int GPIO_read(int8_t pin); 
 int GPIO_readADC(int8_t pin); 
 #ifdef __cplusplus

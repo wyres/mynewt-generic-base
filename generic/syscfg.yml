@@ -17,7 +17,12 @@ syscfg.defs:
     WATCHDOG_TASK_PRIO:
         description: "watchdog task priority"
         value: -1       #9
-
+    WATCHDOG_TIMEOUT_TYPE:
+        description: "watchdog type : 0=NO watchdog, 1=use MCU watchdog (timeout fixed at 27s), 2=use OS timer level watchdog"
+        value: 2        # by default use task level watchdog
+    WATCHDOG_TIMEOUT_MINS:
+        description: "watchdog timeout in minutes when using the OS level timer type of watchdog"
+        value: 5
     MAX_LEDS:
         description: "Max number of leds in this system"
         value: 2
