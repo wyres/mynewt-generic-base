@@ -42,7 +42,8 @@ typedef struct gpio {
     LP_MODE_t lpmode;
     GPIO_IDLE_TYPE lptype;
     GPIO_TYPE type;
-    int adc_chan;
+    int adc_chan;       // if type is ADC
+    int pwm_chan;       // If type is PWM
     int value;
     hal_gpio_irq_handler_t handler;
     void * arg;
@@ -129,16 +130,19 @@ void* GPIO_define_adc(const char* name, int8_t pin, int adc_chan, LP_MODE_t offm
 
 // Create PWM on a GPIO (caller must ensure hw compatibility between GPIO chosen and PWM blocks)
 void* GPIO_define_pwm(const char* name, int8_t pin, int pwm_chan, LP_MODE_t offmode, GPIO_IDLE_TYPE offtype) {
+    // ask hal/BSP to check this pin can use this chan (timer)
+    if (!hal_bsp_pwm_define(pin, pwm_chan)) {
+        assert(0);
+    }
     // already setup?
     GPIO_t* p = allocGPIO(pin);
     if (p!=NULL) {
-
         strncpy(p->name, name, GPIO_NAME_SZ);
         p->type = GPIO_PWM;
         p->lpmode = offmode;
         p->lptype = offtype;
         p->lpEnabled = true;        // assume pin is alive in current lp mode!
-        p->adc_chan = pwm_chan;     // TODO
+        p->pwm_chan = pwm_chan;     // Timer id
         init_hal(p);
     }
     return p;
@@ -204,14 +208,26 @@ int GPIO_write(int8_t pin, int val) {
     }
     return p->value;
 }
-int GPIO_writePWM(int8_t pin, int val) {
+
+// Start or stop tone generation. Val is frequency in Hz 
+int GPIO_writePWM(int8_t pin, int val, int duty) {
     GPIO_t* p = findGPIO(pin);
     assert(p!=NULL);
     assert(p->type==GPIO_PWM);
+    if (duty<0 || duty>100) {
+        duty = 50;
+    }
     p->value = val;
-    if (p->lpEnabled) {
-        // TODO
-        hal_gpio_write(p->pin, p->value);
+    if (val>0) {
+        if (p->lpEnabled) {
+            // Start PWM using correct timer, duty cycle
+            hal_bsp_pwm_start(p->pin, p->pwm_chan, p->value, duty);
+            log_info("PWM[%d]:Start@%dHz", p->pin, val);
+        }
+    } else {
+        // 0 means stop
+        hal_bsp_pwm_stop(p->pin, p->pwm_chan);
+        log_info("PWM[%d]:Stop", p->pin);
     }
     return p->value;
 }
@@ -318,8 +334,8 @@ static void init_hal(GPIO_t* p) {
                 break;
             }
             case GPIO_PWM: {
-                // TODO
-                hal_gpio_init_out(p->pin, p->value);
+                // This depends on bsp/mcu specific stuff
+                // No pin specific init required beforehand
                 break;
             }
             case GPIO_IN: {

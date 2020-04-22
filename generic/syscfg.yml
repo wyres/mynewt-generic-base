@@ -62,6 +62,12 @@ syscfg.defs:
     CFG_MAX_KEYS:
         description: "max number of config keys we will ever have"
         value: 200
+    MAX_PWMS:
+        description: "Max number of PWM player outputs in this system"
+        value: 0
+    PWM_QUEUE_SZ:
+        description: "Max number of queued tones in PWM player"
+        value: 64
 
 
     
