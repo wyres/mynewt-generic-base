@@ -32,10 +32,8 @@
 
 static char* BLE_CHECK="AT+WHO\r\n";
 
-static char* BLE_TYPE_SERIAL="AT+TYPE=2\r\n";  
-// Type value returned from AT+WHO. Don't ask why the 'set' id is different from the 'who' id...
-// NOTE: Ids aligned as of version 6 of BLE scannner code
-#define TYPE_SERIAL    (1)
+static char* BLE_ENABLE_SERIAL="AT+CONN_EN\r\n";  
+static char* BLE_DISABLE_SERIAL="AT+CONN_DIS\r\n";  
 
 static struct bleuartctx {
     struct os_event myUARTEvent;
@@ -50,11 +48,12 @@ static struct bleuartctx {
     uint8_t rxbuf[WSKT_BUF_SZ+1];
     uint32_t lastDataTime;
     WBLE_CB_FN_t cbfn;
-    uint32_t cardType;
+    uint8_t fwVersionMaj;
+    uint8_t fwVersionMin;
 } _ctx;     // in bss so set to all 0 by definition
 
 // State machine for BLE control
-enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_WAIT_TYPE_SERIAL, MS_BLE_SERIAL_RUNNING, MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
+enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_WAIT_ENABLE_SERIAL, MS_BLE_SERIAL_RUNNING, MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
 enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_RET_OK, ME_BLE_RET_ERR, ME_BLE_RET_INT,
      ME_BLE_UPDATE, ME_BLE_UART_OK, ME_BLE_UART_NOK };
 
@@ -221,17 +220,25 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             log_debug("BLE: who=%d", (uint32_t)data);
 #endif
             // Normally the who response is the data value. Store it for later
-            ctx->cardType = (uint32_t)data;
-            if (ctx->cardType!=TYPE_SERIAL) {
-                log_debug("BLE:card says type %d, but we want to be serial", ctx->cardType);
-                return MS_BLE_WAIT_TYPE_SERIAL;
+            // from BLEV2 it is the firmware version stored in a uint16 (MSB=major, LSB=minor)
+            ctx->fwVersionMaj = ((((uint32_t)data) >>8) & 0xFF);
+            ctx->fwVersionMin = (((uint32_t)data) & 0xFF);
+            if (ctx->fwVersionMaj < 2) {
+                // bad ble version
+                log_warn("BLE : module firmware v%d.%d not > 2.0: fail", ctx->fwVersionMaj, ctx->fwVersionMin);
+                if (ctx->cbfn!=NULL) {
+                    (*ctx->cbfn)(WBLE_COMM_FAIL, NULL);
+                }
+                return MS_BLE_OFF;
+            } else {
+                log_info("BLE: firmware version %d.%d", ctx->fwVersionMaj, ctx->fwVersionMin);
             }
             // if cb call it
             if (ctx->cbfn!=NULL) {
                 (*ctx->cbfn)(WBLE_COMM_OK, NULL);
             }
-
-            return MS_BLE_SERIAL_RUNNING;
+            // Go and enable serial connections from remote people
+            return MS_BLE_WAIT_ENABLE_SERIAL;
         }
         case ME_BLE_OFF: {
             // gave up - directly off
@@ -245,26 +252,24 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
     assert(0);      // shouldn't get here
 }
 
-// Put module into serial mode and wait for response, then go to operation
-static SM_STATE_ID_t State_WaitTypeSetSerial(void* arg, int e, void* data) {
+// Config module to allow connections in serial mode and wait for response, then go to operation
+static SM_STATE_ID_t State_WaitEnableSerial(void* arg, int e, void* data) {
     struct bleuartctx* ctx = (struct bleuartctx*)arg;
     switch(e) {
         case SM_ENTER: {
             sm_timer_start(ctx->mySMId, 500);
-            wskt_write(ctx->uartSkt, (uint8_t*)BLE_TYPE_SERIAL, strlen(BLE_TYPE_SERIAL));
-            log_debug("BLE: set type serial");
+            wskt_write(ctx->uartSkt, (uint8_t*)BLE_ENABLE_SERIAL, strlen(BLE_ENABLE_SERIAL));
+            log_debug("BLE: set connnections serial as on");
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
-            ctx->cardType=TYPE_SERIAL;     // Assume it changed ok
             return MS_BLE_SERIAL_RUNNING;
         }
         case ME_BLE_RET_OK: {
 //            log_debug("BLE: type change ok");
-            ctx->cardType=TYPE_SERIAL;     // Assume it changed ok
             return MS_BLE_SERIAL_RUNNING;
         }
         case ME_BLE_OFF: {
@@ -320,7 +325,8 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
     struct bleuartctx* ctx = (struct bleuartctx*)arg;
     switch(e) {
         case SM_ENTER: {
-
+            wskt_write(ctx->uartSkt, (uint8_t*)BLE_DISABLE_SERIAL, strlen(BLE_DISABLE_SERIAL));
+            log_debug("BLE: set connnections serial as off");
             sm_timer_start(ctx->mySMId, 500);
             return SM_STATE_CURRENT;
         }
@@ -358,7 +364,7 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
 static const SM_STATE_t _bleSM[MS_BLE_LAST] = {
     {.id=MS_BLE_OFF,        .name="BleOff",       .fn=State_Off},
     {.id=MS_BLE_WAITPOWERON,.name="BleWaitPower", .fn=State_WaitPoweron},
-    {.id=MS_BLE_WAIT_TYPE_SERIAL,  .name="BleWaitTypeSerial", .fn=State_WaitTypeSetSerial},
+    {.id=MS_BLE_WAIT_ENABLE_SERIAL,  .name="BleWaitEnableSerial", .fn=State_WaitEnableSerial},
     {.id=MS_BLE_STARTING,   .name="BleStarting",  .fn=State_Starting},    
     {.id=MS_BLE_SERIAL_RUNNING,   .name="BleSerialRunning", .fn=State_SerialRunning},    
     {.id=MS_BLE_STOPPINGCOMM, .name="BleStopping", .fn=State_StoppingComm},    

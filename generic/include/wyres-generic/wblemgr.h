@@ -23,11 +23,13 @@ typedef enum { WBLE_COMM_OK, WBLE_COMM_FAIL, WBLE_SCAN_RX_IB, WBLE_IB_CONN, WBLE
 typedef struct ibeacon_data {
 //    uint8_t uuid[16];     // Not currently available or useful
     uint32_t lastSeenAt;        // In seconds since boot
+    uint32_t firstSeenAt;        // In seconds since boot : set only when first seen in list
     uint16_t major;
     uint16_t minor;
     int8_t rssi;
     uint8_t extra;
-    bool new;               // added to list (reset by user of mgr)
+    bool new;
+    uint8_t newULCnt;
 } ibeacon_data_t;
 typedef void (*WBLE_CB_FN_t)(WBLE_EVENT_t e, ibeacon_data_t* b);
 
@@ -41,7 +43,7 @@ void wble_stop(void* ctx);
 void wble_scan_start(void* ctx, const uint8_t* uuid, uint16_t majorStart, uint16_t majorEnd, uint32_t sz, ibeacon_data_t* list);
 void wble_scan_stop(void* ctx);
 // configure ibeacon operation (when not scanning)
-void wble_ibeacon_start(void* ctx, const uint8_t* uuid, uint16_t maj, uint16_t min, uint8_t extra);
+void wble_ibeacon_start(void* ctx, const uint8_t* uuid, uint16_t maj, uint16_t min, uint8_t extra, uint16_t interMS, int8_t txpower);
 void wble_ibeacon_stop(void* ctx);
 
 // get number of ibs we have seen so far  (optionally count only those active in last X seconds if activeInLastX >0)

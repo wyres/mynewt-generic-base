@@ -31,31 +31,21 @@
 //#define MAX_IBEACONS    MYNEWT_VAL(WBLE_MAXIBS)
 
 static char* BLE_CHECK="AT+WHO\r\n";
-//static char* BLE_CONFIG="AT+CONFIG,00B4,00B4,0000,1,1\r\n";
-// Rx mode : poll (1 shot give me the list) or push (send each id as and when received)
-//static char* BLE_RXMODE="AT+POLL\r\n";
 // Latest version of BLE scanner using push mode works best for large numbers of BLE devices scanned...
 static char* BLE_RXMODE="AT+PUSH\r\n";
 
-static char BLE_SCAN_START[50]; //AT+START,UUID\r\n\0, need to be sufficient    
-
+//static char BLE_SCAN_START[50]; //AT+START,UUID\r\n\0, need to be sufficient size   - uses txLine in ctx
 static char* BLE_SCAN_STOP="AT+STOP\r\n";
 
-static char* BLE_TYPE_SCANNER="AT+TYPE=1\r\n";  
-static char* BLE_TYPE_IBEACON="AT+TYPE=3\r\n";
-// Type value returned from AT+WHO. Don't ask why the 'set' id is different from the 'who' id...
-// NOTE: Ids aligned as of version 6 of BLE scannner code
-#define TYPE_SCANNER    (1)
-#define TYPE_IBEACON    (3)
+static char* BLE_IB_STOP="AT+IB_STOP\r\n";
+
+// the 'standard' wyres UUID for ibeacons is "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0" (actually its that used by Minew...)
+static uint8_t WYRES_UUID[] = { 0xE2,0xC5,0x6D,0xB5,0xDF,0xFB,0x48,0xD2,0xB0,0x60,0xD0,0xF5,0xA7,0x10,0x96,0xE0 };
 
 #define UUID_SZ (16)
 
-//static os_stack_t _wble_task_stack[WBLE_TASK_STACK_SZ];
-//static struct os_task wble_mgr_task_str;
-
 static struct blectx {
     struct os_event myUARTEvent;
-//    struct os_eventq myEQ;
     struct os_mutex dataMutex;
     SM_ID_t mySMId;
     const char* uartDevice;
@@ -64,10 +54,17 @@ static struct blectx {
     int8_t uartSelect;
     wskt_t* cnx;
     uint8_t rxbuf[WSKT_BUF_SZ+1];
+    char txLine[100];                // For dynamic string creation to send to BLE
     uint32_t lastDataTime;
     WBLE_CB_FN_t cbfn;
     uint8_t uuid[16];
-    uint32_t cardType;
+    uint8_t fwVersionMaj;
+    uint8_t fwVersionMin;
+    uint16_t ibMajor;
+    uint16_t ibMinor;
+    uint8_t ibExtra;
+    uint16_t ibInterMS;
+    int8_t ibTxPower;
     uint16_t majorStart;
     uint16_t majorEnd;
     uint8_t ibListSz;
@@ -80,9 +77,9 @@ static struct blectx {
 } _ctx;     // in bss so set to all 0 by definition
 
 // State machine for BLE control
-enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_WAIT_TYPE_SCAN, MS_BLE_WAIT_TYPE_IB, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, 
-    MS_BLE_IBEACON, MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
-enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_SCAN, ME_BLE_IBEACON, ME_BLE_STOP, ME_BLE_RET_OK, ME_BLE_RET_ERR, ME_BLE_RET_INT,
+enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, 
+    MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
+enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_START_SCAN, ME_BLE_START_IB, ME_BLE_STOP_SCAN, ME_BLE_STOP_IB, ME_BLE_RET_OK, ME_BLE_RET_ERR, ME_BLE_RET_INT,
      ME_BLE_UPDATE, ME_BLE_UART_OK, ME_BLE_UART_NOK };
 
 // predeclare privates
@@ -91,6 +88,10 @@ static void wble_mgr_rxcb(struct os_event* ev);
 static ibeacon_data_t*  getIB(int idx);
 // Add scanned IB to list if not already present else update it
 static int addIB(ibeacon_data_t* ibp);
+// Send ibeaconning on command
+static void sendIBStart(struct blectx* ctx);
+// Send ibeaconning off command
+static void sendIBStop(struct blectx* ctx);
 
 static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
@@ -252,7 +253,19 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             log_debug("BLE: who=%d", (uint32_t)data);
 #endif
             // Normally the who response is the data value. Store it for later
-            ctx->cardType = (uint32_t)data;
+            // from BLEV2 it is the firmware version stored in a uint16 (MSB=major, LSB=minor)
+            ctx->fwVersionMaj = ((((uint32_t)data) >>8) & 0xFF);
+            ctx->fwVersionMin = (((uint32_t)data) & 0xFF);
+            if (ctx->fwVersionMaj < 2) {
+                // bad ble version
+                log_warn("BLE : module firmware v%d.%d not > 2.0: fail", ctx->fwVersionMaj, ctx->fwVersionMin);
+                if (ctx->cbfn!=NULL) {
+                    (*ctx->cbfn)(WBLE_COMM_FAIL, NULL);
+                }
+                return MS_BLE_OFF;
+            } else {
+                log_info("BLE: firmware version %d.%d", ctx->fwVersionMaj, ctx->fwVersionMin);
+            }
             // if cb call it
             if (ctx->cbfn!=NULL) {
                 (*ctx->cbfn)(WBLE_COMM_OK, NULL);
@@ -293,54 +306,21 @@ static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
         case ME_BLE_OFF: {
             return MS_BLE_STOPPINGCOMM;
         }            
-        case ME_BLE_SCAN: {
-            if (ctx->cardType!=TYPE_SCANNER) {
-                log_debug("BLE:card says type %d, but we want to scan", ctx->cardType);
-                return MS_BLE_WAIT_TYPE_SCAN;
-            }
-            // Start scanning
+        case ME_BLE_START_SCAN: {
+            // Start scanning - always allowed
             return MS_BLE_SCANNING;
         }
-        case ME_BLE_IBEACON: {
-            if (ctx->cardType!=TYPE_IBEACON) {
-                log_debug("BLE:card says type %d, but we want to ibeacon", ctx->cardType);
-                return MS_BLE_WAIT_TYPE_IB;
-            }
-            // Start beaconning
-            return MS_BLE_IBEACON;
-        }
-        default: {
-            sm_default_event_log(ctx->mySMId, "BLE", e);
+        case ME_BLE_START_IB: {
+            // beaconning is not a state so can just request it any time
+            log_info("BLE:ib start");
+            sendIBStart(ctx);
             return SM_STATE_CURRENT;
-        }
-    }
-    assert(0);      // shouldn't get here
-}
-// Put module into scanner mode and wait for response, then go to scanning
-static SM_STATE_ID_t State_WaitTypeSetScanner(void* arg, int e, void* data) {
-    struct blectx* ctx = (struct blectx*)arg;
-    switch(e) {
-        case SM_ENTER: {
-            sm_timer_start(ctx->mySMId, 500);
-            wskt_write(ctx->cnx, (uint8_t*)BLE_TYPE_SCANNER, strlen(BLE_TYPE_SCANNER));
-            log_debug("BLE: set type scanner");
+        }            
+        case ME_BLE_STOP_IB: {
+            // beaconning is not a state so can just request it any time
+            log_info("BLE:ib end");
+            sendIBStop(ctx);
             return SM_STATE_CURRENT;
-        }
-        case SM_EXIT: {
-            return SM_STATE_CURRENT;
-        }
-        case SM_TIMEOUT: {
-            ctx->cardType=TYPE_SCANNER;     // Assume it changed ok
-            return MS_BLE_SCANNING;
-        }
-        case ME_BLE_RET_OK: {
-//            log_debug("BLE: type change ok");
-            ctx->cardType=TYPE_SCANNER;     // Assume it changed ok
-            return MS_BLE_SCANNING;
-        }
-        case ME_BLE_OFF: {
-            // gave up
-            return MS_BLE_OFF;
         }            
         default: {
             sm_default_event_log(ctx->mySMId, "BLE", e);
@@ -349,47 +329,23 @@ static SM_STATE_ID_t State_WaitTypeSetScanner(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-// Put module into scanner mode and wait for response
-static SM_STATE_ID_t State_WaitTypeSetIBeacon(void* arg, int e, void* data) {
-    struct blectx* ctx = (struct blectx*)arg;
-    switch(e) {
-        case SM_ENTER: {
-            sm_timer_start(ctx->mySMId, 500);
-            wskt_write(ctx->cnx, (uint8_t*)BLE_TYPE_IBEACON, strlen(BLE_TYPE_IBEACON));
-            log_debug("BLE: set type IB");
-            return SM_STATE_CURRENT;
-        }
-        case SM_EXIT: {
-            return SM_STATE_CURRENT;
-        }
-        case SM_TIMEOUT: {
-            ctx->cardType=TYPE_IBEACON;     // Assume it changed ok
-            return MS_BLE_IBEACON;
-        }
-        case ME_BLE_RET_OK: {
-//            log_debug("BLE: type change ok");
-            ctx->cardType=TYPE_IBEACON;     // Assume it changed ok
-            return MS_BLE_IBEACON;
-        }
-        case ME_BLE_OFF: {
-            // gave up
-            return MS_BLE_OFF;
-        }            
-        default: {
-            sm_default_event_log(ctx->mySMId, "BLE", e);
-            return SM_STATE_CURRENT;
-        }
-    }
-    assert(0);      // shouldn't get here
-}
+
 static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
-            // rx data mode
+            // rx data mode is PUSH
             wskt_write(ctx->cnx, (uint8_t*)BLE_RXMODE, strlen(BLE_RXMODE));
-            // And start the scanning
-            wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_START, strlen(BLE_SCAN_START));
+            // And start the scanning - create the start command dynamically to include UUID
+            if (Util_notAll0(ctx->uuid,UUID_SZ)==true) {
+                sprintf(ctx->txLine,"AT+START,%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n",
+                    ctx->uuid[0],ctx->uuid[1],ctx->uuid[2],ctx->uuid[3],ctx->uuid[4],ctx->uuid[5],ctx->uuid[6],ctx->uuid[7],
+                    ctx->uuid[8],ctx->uuid[9],ctx->uuid[10],ctx->uuid[11],ctx->uuid[12],ctx->uuid[13],ctx->uuid[14],ctx->uuid[15]);    
+            } else {
+                sprintf(ctx->txLine,"AT+START\r\n");
+            }
+            log_debug(ctx->txLine); 
+            wskt_write(ctx->cnx, (uint8_t*)(&ctx->txLine[0]), strlen(ctx->txLine));
             // remind every second
             sm_timer_start(ctx->mySMId, 1000);
             log_info("BLE:scanning[%d->%d]", ctx->majorStart, ctx->majorEnd);
@@ -403,20 +359,45 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
         }
         case SM_TIMEOUT: {
             wskt_write(ctx->cnx, (uint8_t*)BLE_RXMODE, strlen(BLE_RXMODE));
-            // Every second, poll for ibeacon data
+            // Every second, just remind we're in push mode
             sm_timer_start(ctx->mySMId, 1000);
             return SM_STATE_CURRENT;
         }
         // go direct to off if requested
         case ME_BLE_OFF: {
             return MS_BLE_STOPPINGCOMM;
+        }       
+        case ME_BLE_ON: {
+            // We are on, tell caller
+            if (ctx->cbfn!=NULL) {
+                (*ctx->cbfn)(WBLE_COMM_OK, NULL);
+            }
+            // caller is a little confused, make sure we are in the 'ON' state ready for their next move
+            // Back to idle but on mode (exit does the stop)
+            return MS_BLE_ON;
+        }
+     
+        case ME_BLE_START_IB: {
+            // beaconning is not a state so can just request it any time
+            log_info("BLE:ib start");
+            sendIBStart(ctx);
+            return SM_STATE_CURRENT;
         }            
-        case ME_BLE_IBEACON: {
-            // go direct to ibeaconning
-            return MS_BLE_IBEACON;
+        case ME_BLE_STOP_IB: {
+            // beaconning is not a state so can just request it any time
+            log_info("BLE:ib end");
+            sendIBStop(ctx);
+            return SM_STATE_CURRENT;
         }            
+        // Can ignore a start scan request? - no might have changed uuid
+        case ME_BLE_START_SCAN: {
+            // Deal with it by returning to ON, but by resending the start event...
+            sm_sendEvent(ctx->mySMId, ME_BLE_START_SCAN, NULL);
+            // Back to idle but on mode (exit does the stop)
+            return MS_BLE_ON;
+        }
 
-        case ME_BLE_STOP: {            
+        case ME_BLE_STOP_SCAN: {            
             // Back to idle but on mode (exit does the stop)
             return MS_BLE_ON;
         }
@@ -425,8 +406,8 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case ME_BLE_RET_ERR: {
-            // retry scan command
-            wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_START, strlen(BLE_SCAN_START));
+            // retry scan command (assuming noone used txLine elsewhere!)
+            wskt_write(ctx->cnx, (uint8_t*)(&ctx->txLine[0]), strlen(ctx->txLine));
 
             return SM_STATE_CURRENT;
         }
@@ -450,49 +431,13 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-static SM_STATE_ID_t State_IBeacon(void* arg, int e, void* data) {
-    struct blectx* ctx = (struct blectx*)arg;
-    switch(e) {
-        case SM_ENTER: {
-            log_info("BLE:ibeaconning....");
-            // Config to type ibeacon and will start beaconning
-            wskt_write(ctx->cnx, (uint8_t*)BLE_TYPE_IBEACON, strlen(BLE_TYPE_IBEACON));
-            return SM_STATE_CURRENT;
-        }
-        case SM_EXIT: {
-            // back to scanner mode
-            wskt_write(ctx->cnx, (uint8_t*)BLE_TYPE_SCANNER, strlen(BLE_TYPE_SCANNER));
-            log_info("BLE:end ibeacon");
-            return SM_STATE_CURRENT;
-        }
-        case SM_TIMEOUT: {
-            return SM_STATE_CURRENT;
-        }
-        case ME_BLE_STOP: {            
-            // Back to on+idle mode, this will stop the ibeaconning
-            return MS_BLE_ON;
-        }
-        case ME_BLE_OFF: {
-            return MS_BLE_STOPPINGCOMM;
-        }            
-        case ME_BLE_IBEACON: {
-            // we are already mate
-            return SM_STATE_CURRENT;
-        }            
 
-        default: {
-            sm_default_event_log(ctx->mySMId, "BLE", e);
-            return SM_STATE_CURRENT;
-        }
-    }
-    assert(0);      // shouldn't get here
-}
 // delay before closing connection for any last requests
 static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
-            // Ensure asked to stop
+            // Ensure asked to stop scanning
             wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_STOP, strlen(BLE_SCAN_STOP));
             sm_timer_start(ctx->mySMId, 500);
             return SM_STATE_CURRENT;
@@ -525,12 +470,9 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
 static const SM_STATE_t _bleSM[MS_BLE_LAST] = {
     {.id=MS_BLE_OFF,        .name="BleOff",       .fn=State_Off},
     {.id=MS_BLE_WAITPOWERON,.name="BleWaitPower", .fn=State_WaitPoweron},
-    {.id=MS_BLE_WAIT_TYPE_SCAN,  .name="BleWaitTypeScan", .fn=State_WaitTypeSetScanner},
-    {.id=MS_BLE_WAIT_TYPE_IB,  .name="BleWaitTypeIB", .fn=State_WaitTypeSetIBeacon},
     {.id=MS_BLE_STARTING,   .name="BleStarting",  .fn=State_Starting},    
     {.id=MS_BLE_ON,         .name="BleOnIdle", .fn=State_On},
     {.id=MS_BLE_SCANNING,   .name="BleScanning", .fn=State_Scanning},    
-    {.id=MS_BLE_IBEACON,    .name="BleBeaconning", .fn=State_IBeacon},    
     {.id=MS_BLE_STOPPINGCOMM, .name="BleStopping", .fn=State_StoppingComm},    
 };
 
@@ -582,40 +524,53 @@ void wble_scan_start(void* c, const uint8_t* uuid, uint16_t majorStart, uint16_t
     assert(c!=NULL);
     assert(list!=NULL);
     struct blectx* ctx = (struct blectx*)c;
-
-    if(uuid!=NULL && Util_notAll0(uuid,UUID_SZ)==true){
-        sprintf(BLE_SCAN_START,"AT+START,%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n"
-         ,uuid[0],uuid[1],uuid[2],uuid[3],uuid[4],uuid[5],uuid[6],uuid[7],uuid[8],uuid[9],uuid[10],uuid[11],uuid[12],uuid[13],
-          uuid[14],uuid[15]);    
-    }else{
-        sprintf(BLE_SCAN_START,"AT+START\r\n");
+    // reset stats for new scan
+    ctx->nbRxNew=0;
+    ctx->nbRxNewR=0;
+    ctx->nbRxUpdate=0;
+    ctx->nbRxNoSpace=0;
+    ctx->nbRxBadMajor=0;
+    if (uuid!=NULL) {
+        memcpy(ctx->uuid, uuid, UUID_SZ);
+    } else {
+        // No uuid filter, set to 0
+        memset(ctx->uuid, 0, UUID_SZ);
     }
-
-    log_debug(BLE_SCAN_START); 
-
     ctx->majorStart = majorStart;
     ctx->majorEnd = majorEnd;
     ctx->ibListSz = sz;
     ctx->ibList = list;
-    sm_sendEvent(ctx->mySMId, ME_BLE_SCAN, NULL);
+    sm_sendEvent(ctx->mySMId, ME_BLE_START_SCAN, NULL);
 
 }
 void wble_scan_stop(void* c) {
     assert(c!=NULL);
     struct blectx* ctx = (struct blectx*)c;
-    sm_sendEvent(ctx->mySMId, ME_BLE_STOP, NULL);
+    sm_sendEvent(ctx->mySMId, ME_BLE_STOP_SCAN, NULL);
 }
 
-void wble_ibeacon_start(void* c, const uint8_t* uuid, uint16_t maj, uint16_t min, uint8_t extra) {
+void wble_ibeacon_start(void* c, const uint8_t* uuid, uint16_t maj, uint16_t min, uint8_t extra, uint16_t interMS, int8_t txpower) {
     assert(c!=NULL);
     struct blectx* ctx = (struct blectx*)c;
-    sm_sendEvent(ctx->mySMId, ME_BLE_IBEACON, NULL);
+
+    if (uuid!=NULL && Util_notAll0(uuid, UUID_SZ)) {
+        memcpy(ctx->uuid, uuid, UUID_SZ);
+    } else {
+        // No uuid given, set to "default"
+        memcpy(ctx->uuid, WYRES_UUID, UUID_SZ);
+    }
+    ctx->ibMajor = maj;
+    ctx->ibMinor = min;
+    ctx->ibExtra = extra;
+    ctx->ibInterMS = interMS;
+    ctx->ibTxPower = txpower;
+    sm_sendEvent(ctx->mySMId, ME_BLE_START_IB, NULL);
 }
 
 void wble_ibeacon_stop(void* c) {
     assert(c!=NULL);
     struct blectx* ctx = (struct blectx*)c;
-    sm_sendEvent(ctx->mySMId, ME_BLE_STOP, NULL);
+    sm_sendEvent(ctx->mySMId, ME_BLE_STOP_IB, NULL);
 }
 
 void wble_stop(void* c) {
@@ -713,6 +668,24 @@ static void wble_mgr_task(void* arg) {
     }
 }
 */
+// Send ibeaconning on command
+static void sendIBStart(struct blectx* ctx) {
+    // Config to type ibeacon and will start beaconning using params passed
+    // AT_IB_START <uuid>,<major>,<minor>,<extrabyte>,<interval in ms>,<txpower>
+    // All values in hex with leading 0s for fixed length
+    /// Note non v2.0 BLE module doesnt support this
+    sprintf(ctx->txLine,"AT+IB_START,%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x,%04x,%04x,%02x,%04x,%d\r\n",
+            ctx->uuid[0],ctx->uuid[1],ctx->uuid[2],ctx->uuid[3],ctx->uuid[4],ctx->uuid[5],ctx->uuid[6],ctx->uuid[7],
+            ctx->uuid[8],ctx->uuid[9],ctx->uuid[10],ctx->uuid[11],ctx->uuid[12],ctx->uuid[13],ctx->uuid[14],ctx->uuid[15], 
+            ctx->ibMajor, ctx->ibMinor, ctx->ibExtra, ctx->ibInterMS, ctx->ibTxPower);    
+    wskt_write(ctx->cnx, (uint8_t*)&ctx->txLine[0], strlen(ctx->txLine));
+}
+// Send ibeaconning off command
+static void sendIBStop(struct blectx* ctx) {
+    // stop ibeaconning
+    wskt_write(ctx->cnx, (uint8_t*)BLE_IB_STOP, strlen(BLE_IB_STOP));
+}
+
 // manage IB list
 static ibeacon_data_t* getIB(int idx) {
     if (idx<0 || idx>=_ctx.ibListSz) {
@@ -751,6 +724,8 @@ static int addIB(ibeacon_data_t* ibp) {
         _ctx.ibList[freeEntry].rssi = ibp->rssi;
         _ctx.ibList[freeEntry].extra = ibp->extra;
         _ctx.ibList[freeEntry].new = true;
+        _ctx.ibList[freeEntry].newULCnt = 0;            // Flag it as new and not UL'd yet
+        _ctx.ibList[freeEntry].firstSeenAt = TMMgr_getRelTimeSecs();
         _ctx.ibList[freeEntry].lastSeenAt = TMMgr_getRelTimeSecs();
         _ctx.nbRxNew++;
         return freeEntry;
