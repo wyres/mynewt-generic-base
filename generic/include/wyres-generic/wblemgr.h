@@ -29,7 +29,7 @@ typedef struct ibeacon_data {
     int8_t rssi;
     uint8_t extra;
     bool new;
-    uint8_t newULCnt;
+    uint8_t inULCnt;
 } ibeacon_data_t;
 typedef void (*WBLE_CB_FN_t)(WBLE_EVENT_t e, ibeacon_data_t* b);
 

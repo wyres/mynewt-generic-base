@@ -724,7 +724,7 @@ static int addIB(ibeacon_data_t* ibp) {
         _ctx.ibList[freeEntry].rssi = ibp->rssi;
         _ctx.ibList[freeEntry].extra = ibp->extra;
         _ctx.ibList[freeEntry].new = true;
-        _ctx.ibList[freeEntry].newULCnt = 0;            // Flag it as new and not UL'd yet
+        _ctx.ibList[freeEntry].inULCnt = 0;            // Flag it as new and not UL'd yet
         _ctx.ibList[freeEntry].firstSeenAt = TMMgr_getRelTimeSecs();
         _ctx.ibList[freeEntry].lastSeenAt = TMMgr_getRelTimeSecs();
         _ctx.nbRxNew++;
