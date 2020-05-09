@@ -779,9 +779,10 @@ static void wble_mgr_rxcb(struct os_event* ev) {
     } else {
         // Parse it as ibeacon data
         ibeacon_data_t ib;
-        uint32_t uuid;      // we don't care at this point
-        // <MMMM>,<mmmm>,<EX>,<RSSI>,<UUUU>
-        if (sscanf(line, "%4x,%4x,%2x,%2x,%4x", (int*)&ib.major, (int*)&ib.minor, (int*)&ib.extra, (int*)&ib.rssi, (int*)&uuid)<4) {
+        uint8_t devAddr[6];
+        // <MMMM>,<mmmm>,<EX>,<RSSI>,<devAddr>
+        if (sscanf(line, "%4x,%4x,%2x,%2x,%02x%02x%02x%02x%02x%02x", (int*)&ib.major, (int*)&ib.minor, (int*)&ib.extra, (int*)&ib.rssi, 
+                (int*)&devAddr[0],(int*)&devAddr[1],(int*)&devAddr[2],(int*)&devAddr[3],(int*)&devAddr[4],(int*)&devAddr[5],)<4) {
 #ifdef DEBUG_BLE
             log_debug("BLE:bad parse [%s]", line);
 #endif
