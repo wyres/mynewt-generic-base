@@ -30,10 +30,10 @@
 
 #define WBLE_UART    MYNEWT_VAL(WBLE_UART)
 
-static char* BLE_CHECK="AT+WHO\r\n";
+static char* BLE_CHECKCONN="AT+CONN?\r\n";
 
-static char* BLE_ENABLE_SERIAL="AT+CONN_EN\r\n";  
-static char* BLE_DISABLE_SERIAL="AT+CONN_DIS\r\n";  
+//static char* BLE_ENABLE_SERIAL="AT+CONN\r\n";         we never initiate the cross-connect on BLE in case remote is using AT console of the BLE firmware!
+static char* BLE_DISABLE_SERIAL="AT+DISC\r\n";  
 
 static struct bleuartctx {
     struct os_event myUARTEvent;
@@ -53,7 +53,7 @@ static struct bleuartctx {
 } _ctx;     // in bss so set to all 0 by definition
 
 // State machine for BLE control
-enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_WAIT_ENABLE_SERIAL, MS_BLE_SERIAL_RUNNING, MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
+enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_SERIAL_RUNNING, MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
 enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_RET_OK, ME_BLE_RET_ERR, ME_BLE_RET_INT,
      ME_BLE_UPDATE, ME_BLE_UART_OK, ME_BLE_UART_NOK };
 
@@ -192,10 +192,11 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
     struct bleuartctx* ctx = (struct bleuartctx*)arg;
     switch(e) {
         case SM_ENTER: {
-            // Send who command to ensure comm ok
-            wskt_write(ctx->uartSkt, (uint8_t*)BLE_CHECK, strlen(BLE_CHECK));
+            // Send a ">" to check if cross connected to NUS serial BLE client already..
+            // need a return of "2" to continue
+            wskt_write(ctx->uartSkt, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN));
             sm_timer_start(ctx->mySMId, 1000);      // allow 1s for response
-            log_debug("BLE: check who");
+            log_debug("BLU: check CC");
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -203,7 +204,7 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
         }
         case SM_TIMEOUT: {
             // No response to WHO, back to off
-            log_warn("BLE: no who");
+            log_warn("BLU: no CC");
             // if cb call it
             if (ctx->cbfn!=NULL) {
                 (*ctx->cbfn)(WBLE_COMM_FAIL, NULL);
@@ -211,34 +212,31 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             return MS_BLE_OFF;
         }
         case ME_BLE_RET_OK: {       // return is just OK or READY - really should wait for proper WHO response
-            log_debug("BLE: comm ok - rewho");
-            wskt_write(ctx->uartSkt, (uint8_t*)BLE_CHECK, strlen(BLE_CHECK));
+            log_debug("BLU: comm ok - reCC");
+            wskt_write(ctx->uartSkt, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN));
             return SM_STATE_CURRENT;
         }
-        case ME_BLE_RET_INT: {        // return is an integer which is what we expect from WHO
+        case ME_BLE_RET_INT: {        // return is an integer which tells us connection status
 #ifdef DEBUG_BLE
-            log_debug("BLE: who=%d", (uint32_t)data);
+            log_debug("BLU: con status=%d", (uint32_t)data);
 #endif
-            // Normally the who response is the data value. Store it for later
-            // from BLEV2 it is the firmware version stored in a uint16 (MSB=major, LSB=minor)
-            ctx->fwVersionMaj = ((((uint32_t)data) >>8) & 0xFF);
-            ctx->fwVersionMin = (((uint32_t)data) & 0xFF);
-            if (ctx->fwVersionMaj < 2) {
-                // bad ble version
-                log_warn("BLE : module firmware v%d.%d not > 2.0: fail", ctx->fwVersionMaj, ctx->fwVersionMin);
+            // 0=no ble nus client, 1=ble nus client but not connected to uart, 2=cross-connection so go!
+            if (((uint32_t)data) == 2) {
+                log_debug("BLU: crossconnect ok");
+                // if cb call it
+                if (ctx->cbfn!=NULL) {
+                    (*ctx->cbfn)(WBLE_COMM_OK, NULL);
+                }
+                // Go and enable serial connections from remote people
+                return MS_BLE_SERIAL_RUNNING;
+            } else {
+                log_debug("BLU: no ble nus client");
+                // if cb call it
                 if (ctx->cbfn!=NULL) {
                     (*ctx->cbfn)(WBLE_COMM_FAIL, NULL);
                 }
                 return MS_BLE_OFF;
-            } else {
-                log_info("BLE: firmware version %d.%d", ctx->fwVersionMaj, ctx->fwVersionMin);
             }
-            // if cb call it
-            if (ctx->cbfn!=NULL) {
-                (*ctx->cbfn)(WBLE_COMM_OK, NULL);
-            }
-            // Go and enable serial connections from remote people
-            return MS_BLE_WAIT_ENABLE_SERIAL;
         }
         case ME_BLE_OFF: {
             // gave up - directly off
@@ -252,37 +250,6 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
     assert(0);      // shouldn't get here
 }
 
-// Config module to allow connections in serial mode and wait for response, then go to operation
-static SM_STATE_ID_t State_WaitEnableSerial(void* arg, int e, void* data) {
-    struct bleuartctx* ctx = (struct bleuartctx*)arg;
-    switch(e) {
-        case SM_ENTER: {
-            sm_timer_start(ctx->mySMId, 500);
-            wskt_write(ctx->uartSkt, (uint8_t*)BLE_ENABLE_SERIAL, strlen(BLE_ENABLE_SERIAL));
-            log_debug("BLE: set connnections serial as on");
-            return SM_STATE_CURRENT;
-        }
-        case SM_EXIT: {
-            return SM_STATE_CURRENT;
-        }
-        case SM_TIMEOUT: {
-            return MS_BLE_SERIAL_RUNNING;
-        }
-        case ME_BLE_RET_OK: {
-//            log_debug("BLE: type change ok");
-            return MS_BLE_SERIAL_RUNNING;
-        }
-        case ME_BLE_OFF: {
-            // gave up
-            return MS_BLE_OFF;
-        }            
-        default: {
-            sm_default_event_log(ctx->mySMId, "BLE", e);
-            return SM_STATE_CURRENT;
-        }
-    }
-    assert(0);      // shouldn't get here
-}
 
 static SM_STATE_ID_t State_SerialRunning(void* arg, int e, void* data) {
     struct bleuartctx* ctx = (struct bleuartctx*)arg;
@@ -364,7 +331,6 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
 static const SM_STATE_t _bleSM[MS_BLE_LAST] = {
     {.id=MS_BLE_OFF,        .name="BleOff",       .fn=State_Off},
     {.id=MS_BLE_WAITPOWERON,.name="BleWaitPower", .fn=State_WaitPoweron},
-    {.id=MS_BLE_WAIT_ENABLE_SERIAL,  .name="BleWaitEnableSerial", .fn=State_WaitEnableSerial},
     {.id=MS_BLE_STARTING,   .name="BleStarting",  .fn=State_Starting},    
     {.id=MS_BLE_SERIAL_RUNNING,   .name="BleSerialRunning", .fn=State_SerialRunning},    
     {.id=MS_BLE_STOPPINGCOMM, .name="BleStopping", .fn=State_StoppingComm},    

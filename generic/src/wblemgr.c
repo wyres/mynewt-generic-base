@@ -723,6 +723,8 @@ static int addIB(ibeacon_data_t* ibp) {
         _ctx.ibList[freeEntry].minor = ibp->minor;
         _ctx.ibList[freeEntry].rssi = ibp->rssi;
         _ctx.ibList[freeEntry].extra = ibp->extra;
+        // Nota : if the ibeacon changes its devAddr randomly (as they do) then this field is not useful
+        memcpy(_ctx.ibList[freeEntry].devaddr, ibp->devaddr, DEVADDR_SZ);
         _ctx.ibList[freeEntry].new = true;
         _ctx.ibList[freeEntry].inULCnt = 0;            // Flag it as new and not UL'd yet
         _ctx.ibList[freeEntry].firstSeenAt = TMMgr_getRelTimeSecs();
@@ -779,10 +781,9 @@ static void wble_mgr_rxcb(struct os_event* ev) {
     } else {
         // Parse it as ibeacon data
         ibeacon_data_t ib;
-        uint8_t devAddr[6];
         // <MMMM>,<mmmm>,<EX>,<RSSI>,<devAddr>
         if (sscanf(line, "%4x,%4x,%2x,%2x,%02x%02x%02x%02x%02x%02x", (int*)&ib.major, (int*)&ib.minor, (int*)&ib.extra, (int*)&ib.rssi, 
-                (int*)&devAddr[0],(int*)&devAddr[1],(int*)&devAddr[2],(int*)&devAddr[3],(int*)&devAddr[4],(int*)&devAddr[5])<4) {
+                (int*)&ib.devaddr[0],(int*)&ib.devaddr[1],(int*)&ib.devaddr[2],(int*)&ib.devaddr[3],(int*)&ib.devaddr[4],(int*)&ib.devaddr[5])<4) {
 #ifdef DEBUG_BLE
             log_debug("BLE:bad parse [%s]", line);
 #endif

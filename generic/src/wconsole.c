@@ -372,6 +372,13 @@ static void processATCmd(char* line) {
             s++;
         }
     }
+    // check we are not talking to another console (return of OK or ERROR)
+    if (strncmp("OK", els[0], 2)==0 || strncmp("ERROR", els[0], 5)==0) {
+        // give up immediately
+        log_debug("detected remote is console[%s], stopping", els[0]);
+        wconsole_stop();
+        return;
+    }
     // find it in the list
     for(int i=0;i<_ctx.ncmds;i++) {
         if (strcmp(els[0], _ctx.cmds[i].cmd)==0) {

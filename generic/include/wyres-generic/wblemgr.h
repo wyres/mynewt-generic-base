@@ -18,10 +18,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+#define DEVADDR_SZ  (6)
 typedef enum { WBLE_COMM_OK, WBLE_COMM_FAIL, WBLE_SCAN_RX_IB, WBLE_IB_CONN, WBLE_IB_DISC } WBLE_EVENT_t;
 typedef struct ibeacon_data {
 //    uint8_t uuid[16];     // Not currently available or useful
+    uint8_t devaddr[DEVADDR_SZ];
     uint32_t lastSeenAt;        // In seconds since boot
     uint32_t firstSeenAt;        // In seconds since boot : set only when first seen in list
     uint16_t major;
