@@ -37,8 +37,8 @@
 #define UART_LINE_SZ (WSKT_BUF_SZ)
 
 // Candidates for the end of line char
-#define LF (0x0A)
-#define CR (0x0D)
+#define LF (0x0A)           // \n  - default end of line
+#define CR (0x0D)           // \r
 
 static struct UARTDeviceCfg {
     const char* dname;

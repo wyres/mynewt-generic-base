@@ -310,7 +310,7 @@ bool CFMgr_resetElement(uint16_t key) {
 
 // iterate over all keys, calling cb for each.
 // in the CB the other access methods can be called
-void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb) {
+void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb, void* cbctx) {
     int key = 0;
     for(int i=0;i<_cfg.nbKeys; i++) {
         // get each key, but ensure NVM in state to allow CB to call other methods
@@ -319,7 +319,7 @@ void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb) {
         cfgUnlockR();
         // if no keymodule filter, or the key has the correct keymodule as its MSB, give it to CB
         if (keymodule==-1 || (key>>8)==keymodule) {
-            (*(cb))(key);
+            (*(cb))(cbctx, key);
         }
     }
 
@@ -331,7 +331,7 @@ void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb) {
 static void informListeners(uint16_t key) {
     // tell anyone that cares
     for(int i=0;i<_cfg.nCBs;i++) {
-        (*(_cfg.cbList[i]))(key);
+        (*(_cfg.cbList[i]))(NULL, key);
     }
 }
 /** PROM layout

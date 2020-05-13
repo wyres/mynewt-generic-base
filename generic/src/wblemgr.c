@@ -39,6 +39,12 @@ static char* BLE_SCAN_STOP="AT+STOP\r\n";
 
 static char* BLE_IB_STOP="AT+IB_STOP\r\n";
 
+static char* BLE_CHECKCONN="AT+CONN?\r\n";
+
+//static char* BLE_ENABLE_SERIAL="AT+CONN\r\n";         we never initiate the cross-connect on BLE in case remote is using AT console of the BLE firmware!
+static char* BLE_DISABLE_SERIAL="AT+DISC\r\n";  
+
+
 // the 'standard' wyres UUID for ibeacons is "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0" (actually its that used by Minew...)
 static uint8_t WYRES_UUID[] = { 0xE2,0xC5,0x6D,0xB5,0xDF,0xFB,0x48,0xD2,0xB0,0x60,0xD0,0xF5,0xA7,0x10,0x96,0xE0 };
 
@@ -77,10 +83,10 @@ static struct blectx {
 } _ctx;     // in bss so set to all 0 by definition
 
 // State machine for BLE control
-enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, 
+enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, MS_BLE_UART_CHECK, MS_BLE_UART_RUNNING,
     MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
 enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_START_SCAN, ME_BLE_START_IB, ME_BLE_STOP_SCAN, ME_BLE_STOP_IB, ME_BLE_RET_OK, ME_BLE_RET_ERR, ME_BLE_RET_INT,
-     ME_BLE_UPDATE, ME_BLE_UART_OK, ME_BLE_UART_NOK };
+     ME_BLE_UPDATE, ME_BLE_UART_OK, ME_BLE_UART_NOK, ME_BLE_UART_CONN, ME_BLE_UART_DISC };
 
 // predeclare privates
 //static void wble_mgr_task(void* arg);
@@ -92,6 +98,12 @@ static int addIB(ibeacon_data_t* ibp);
 static void sendIBStart(struct blectx* ctx);
 // Send ibeaconning off command
 static void sendIBStop(struct blectx* ctx);
+
+static void callCB(struct blectx* ctx, WBLE_EVENT_t e, void* d) {
+    if (ctx->cbfn!=NULL) {
+        (*ctx->cbfn)(e, d);
+    }
+}
 
 static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
@@ -191,9 +203,7 @@ static SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
         case ME_BLE_UART_NOK: {
             // ooops, we didnt get our exclusive access...
             log_debug("BLE: Failed uart!");
-            if (ctx->cbfn!=NULL) {
-                (*ctx->cbfn)(WBLE_COMM_FAIL, NULL);
-            }
+            callCB(ctx, WBLE_COMM_FAIL, NULL);
 
             return MS_BLE_OFF;
         }
@@ -238,13 +248,12 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             // No response to WHO, back to off
             log_warn("BLE: no who");
             // if cb call it
-            if (ctx->cbfn!=NULL) {
-                (*ctx->cbfn)(WBLE_COMM_FAIL, NULL);
-            }
+            callCB(ctx, WBLE_COMM_FAIL, NULL);
+            
             return MS_BLE_OFF;
         }
         case ME_BLE_RET_OK: {       // return is just OK or READY - really should wait for proper WHO response
-            log_debug("BLE: comm ok - rewho");
+            log_debug("BLE: rewho");
             wskt_write(ctx->cnx, (uint8_t*)BLE_CHECK, strlen(BLE_CHECK));
             return SM_STATE_CURRENT;
         }
@@ -258,20 +267,21 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             ctx->fwVersionMin = (((uint32_t)data) & 0xFF);
             if (ctx->fwVersionMaj < 2) {
                 // bad ble version
-                log_warn("BLE : module firmware v%d.%d not > 2.0: fail", ctx->fwVersionMaj, ctx->fwVersionMin);
-                if (ctx->cbfn!=NULL) {
-                    (*ctx->cbfn)(WBLE_COMM_FAIL, NULL);
-                }
+                log_warn("BLE : module fw v%d.%d not > 2.0: fail", ctx->fwVersionMaj, ctx->fwVersionMin);
+                callCB(ctx, WBLE_COMM_FAIL, NULL);
                 return MS_BLE_OFF;
             } else {
-                log_info("BLE: firmware version %d.%d", ctx->fwVersionMaj, ctx->fwVersionMin);
+                log_info("BLE: fw v%d.%d", ctx->fwVersionMaj, ctx->fwVersionMin);
             }
             // if cb call it
-            if (ctx->cbfn!=NULL) {
-                (*ctx->cbfn)(WBLE_COMM_OK, NULL);
-            }
+            callCB(ctx, WBLE_COMM_OK, NULL);
 
             return MS_BLE_ON;
+        }
+        case ME_BLE_UART_CONN: {
+            // Not allowed
+            callCB(ctx, WBLE_UART_DISC, NULL);
+            return SM_STATE_CURRENT;
         }
         case ME_BLE_OFF: {
             // gave up - directly off
@@ -298,9 +308,7 @@ static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
         }
         case ME_BLE_ON: {
             // We are on
-            if (ctx->cbfn!=NULL) {
-                (*ctx->cbfn)(WBLE_COMM_OK, NULL);
-            }
+            callCB(ctx, WBLE_COMM_OK, NULL);
             return SM_STATE_CURRENT;
         }
         case ME_BLE_OFF: {
@@ -310,9 +318,17 @@ static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
             // Start scanning - always allowed
             return MS_BLE_SCANNING;
         }
+        case ME_BLE_UART_CONN: {
+            // Check if BLE is in the right state to be connected for remote uart 
+            return MS_BLE_UART_CHECK;
+        }
+        case ME_BLE_UART_DISC: {
+            // ok, whatever
+            return SM_STATE_CURRENT;
+        }
         case ME_BLE_START_IB: {
             // beaconning is not a state so can just request it any time
-            log_info("BLE:ib start");
+            log_info("BLE:ib go");
             sendIBStart(ctx);
             return SM_STATE_CURRENT;
         }            
@@ -369,9 +385,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
         }       
         case ME_BLE_ON: {
             // We are on, tell caller
-            if (ctx->cbfn!=NULL) {
-                (*ctx->cbfn)(WBLE_COMM_OK, NULL);
-            }
+            callCB(ctx, WBLE_COMM_OK, NULL);
             // caller is a little confused, make sure we are in the 'ON' state ready for their next move
             // Back to idle but on mode (exit does the stop)
             return MS_BLE_ON;
@@ -379,7 +393,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
      
         case ME_BLE_START_IB: {
             // beaconning is not a state so can just request it any time
-            log_info("BLE:ib start");
+            log_info("BLE:ib go in scan");
             sendIBStart(ctx);
             return SM_STATE_CURRENT;
         }            
@@ -391,10 +405,15 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
         }            
         // Can ignore a start scan request? - no might have changed uuid
         case ME_BLE_START_SCAN: {
-            // Deal with it by returning to ON, but by resending the start event...
+            // Deal with it by returning to ON, AND resending the start event so we come back here...
             sm_sendEvent(ctx->mySMId, ME_BLE_START_SCAN, NULL);
             // Back to idle but on mode (exit does the stop)
             return MS_BLE_ON;
+        }
+        case ME_BLE_UART_CONN: {
+            // Not allowed
+            callCB(ctx, WBLE_UART_DISC, NULL);
+            return SM_STATE_CURRENT;
         }
 
         case ME_BLE_STOP_SCAN: {            
@@ -416,9 +435,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             // data is directly the index in list TODO could be out of date.... too bad...
             ibeacon_data_t* ib=getIB((int)data);
             // if cb call it
-            if (ctx->cbfn!=NULL) {
-                (*ctx->cbfn)(WBLE_SCAN_RX_IB, ib);
-            }
+            callCB(ctx, WBLE_SCAN_RX_IB, ib);
 #ifdef DEBUG_BLE
             log_debug(".");
 #endif
@@ -426,6 +443,112 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
         }
         default: {
             sm_default_event_log(ctx->mySMId, "BLE", e);
+            return SM_STATE_CURRENT;
+        }
+    }
+    assert(0);      // shouldn't get here
+}
+
+// check if cross-connected comm
+static SM_STATE_ID_t State_CheckUARTConn(void* arg, int e, void* data) {
+    struct blectx* ctx = (struct blectx*)arg;
+    switch(e) {
+        case SM_ENTER: {
+            // Send a "AT+CONN?" to check if cross connected to NUS serial BLE client already..
+            // need a return of "2" to continue
+            wskt_write(ctx->cnx, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN));
+            sm_timer_start(ctx->mySMId, 1000);      // allow 1s for response
+            log_debug("BLU: check CC sent");
+            return SM_STATE_CURRENT;
+        }
+        case SM_EXIT: {
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
+            // No response, back to on
+            log_warn("BLU: no CC");
+            // if cb call it
+            callCB(ctx, WBLE_COMM_FAIL, NULL);
+            return MS_BLE_ON;
+        }
+        case ME_BLE_UART_DISC: {
+            return MS_BLE_ON;       // abandon
+        }
+
+        case ME_BLE_RET_OK: {       // return is just OK or READY - really should wait for proper AT+CONN? response
+            log_debug("BLU: comm ok - reCC");
+            wskt_write(ctx->cnx, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN));
+            return SM_STATE_CURRENT;
+        }
+        case ME_BLE_RET_INT: {        // return is an integer which tells us connection status
+#ifdef DEBUG_BLE
+            log_debug("BLU: con status=%d", (uint32_t)data);
+#endif
+            // 0=no ble nus client, 1=ble nus client but not connected to uart, 2=cross-connection so go!
+            if (((uint32_t)data) == 2) {
+                log_debug("BLU: cc ok");
+                // if cb call it
+                callCB(ctx, WBLE_UART_CONN, NULL);
+                
+                // Go and enable serial connections from remote people
+                return MS_BLE_UART_RUNNING;
+            } else {
+                log_debug("BLU: no cc (%d)", (uint32_t)data);
+                // if cb call it
+                callCB(ctx, WBLE_UART_DISC, NULL);
+                
+                return MS_BLE_ON;
+            }
+        }
+        case ME_BLE_OFF: {
+            // gave up - directly off
+            return MS_BLE_OFF;
+        }            
+        default: {
+            sm_default_event_log(ctx->mySMId, "BLU", e);
+            return SM_STATE_CURRENT;
+        }
+    }
+    assert(0);      // shouldn't get here
+}
+
+
+static SM_STATE_ID_t State_UARTRunning(void* arg, int e, void* data) {
+    struct blectx* ctx = (struct blectx*)arg;
+    switch(e) {
+        case SM_ENTER: {
+            log_info("BLU:serialing");
+            return SM_STATE_CURRENT;
+        }
+        case SM_EXIT: {
+            log_info("BLU:end serial");
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
+            return SM_STATE_CURRENT;
+        }
+        // go direct to off if requested
+        case ME_BLE_OFF: {
+            // Ensure we break connection 
+            wskt_write(ctx->cnx, (uint8_t*)BLE_DISABLE_SERIAL, strlen(BLE_DISABLE_SERIAL));
+            log_debug("BLU: set connnections serial as off");
+            return MS_BLE_STOPPINGCOMM;
+        }            
+
+        case ME_BLE_RET_OK: {
+            // ignore any non-ib return data
+            return SM_STATE_CURRENT;
+        }
+        case ME_BLE_RET_ERR: {
+            // TODO what could cause this?
+            return SM_STATE_CURRENT;
+        }
+        case ME_BLE_UART_DISC: {
+            return MS_BLE_ON;
+        }
+
+        default: {
+            sm_default_event_log(ctx->mySMId, "BLU", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -454,9 +577,8 @@ static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
         }            
         case ME_BLE_ON: {
             // comm ok already
-            if (ctx->cbfn!=NULL) {
-                (*ctx->cbfn)(WBLE_COMM_OK, NULL);
-            }
+            callCB(ctx, WBLE_COMM_OK, NULL);
+            
             return MS_BLE_ON;
         }
         default: {
@@ -473,6 +595,8 @@ static const SM_STATE_t _bleSM[MS_BLE_LAST] = {
     {.id=MS_BLE_STARTING,   .name="BleStarting",  .fn=State_Starting},    
     {.id=MS_BLE_ON,         .name="BleOnIdle", .fn=State_On},
     {.id=MS_BLE_SCANNING,   .name="BleScanning", .fn=State_Scanning},    
+    {.id=MS_BLE_UART_CHECK,   .name="BleUARTCheck", .fn=State_CheckUARTConn},    
+    {.id=MS_BLE_UART_RUNNING,   .name="BleUARTRun", .fn=State_UARTRunning},    
     {.id=MS_BLE_STOPPINGCOMM, .name="BleStopping", .fn=State_StoppingComm},    
 };
 
@@ -520,6 +644,40 @@ void wble_start(void* c, WBLE_CB_FN_t cb) {
     ctx->cbfn = cb;
     sm_sendEvent(ctx->mySMId, ME_BLE_ON, NULL);
 }
+
+// Request to use ble comm directly as remote uart (possible during ibeaconning). 
+void wble_line_open(void* c) {
+    assert(c!=NULL);
+    struct blectx* ctx = (struct blectx*)c;
+    // Ask SM to run (if it is aleady this will be ignored)
+    sm_sendEvent(ctx->mySMId, ME_BLE_UART_CONN, NULL);
+    return;
+}
+
+int wble_line_write(void* c, uint8_t* data, uint32_t sz) {
+    assert(c!=NULL);
+    struct blectx* ctx = (struct blectx*)c;
+
+    if (ctx->cnx==NULL) {
+        log_warn("BLU:can't write as no uart dev..");
+        return SKT_NODEV;
+    }
+    // Write thru directly if in correct state (note can't pass to SM 'cleanly' as would need to copy buffer...)
+    if (sm_getCurrentState(ctx->mySMId)==MS_BLE_UART_RUNNING) {
+        return wskt_write(ctx->cnx, data, sz);
+    }
+    return -1;       // No write for you my friend
+}
+
+void wble_line_close(void* c) {
+    assert(c!=NULL);
+    struct blectx* ctx = (struct blectx*)c;
+
+    sm_sendEvent(ctx->mySMId, ME_BLE_UART_DISC, NULL);
+    // leave any buffers to be tx'd in their own time
+    return;
+}
+
 void wble_scan_start(void* c, const uint8_t* uuid, uint16_t majorStart, uint16_t majorEnd, uint32_t sz, ibeacon_data_t* list) {
     assert(c!=NULL);
     assert(list!=NULL);
@@ -540,6 +698,7 @@ void wble_scan_start(void* c, const uint8_t* uuid, uint16_t majorStart, uint16_t
     ctx->majorEnd = majorEnd;
     ctx->ibListSz = sz;
     ctx->ibList = list;
+
     sm_sendEvent(ctx->mySMId, ME_BLE_START_SCAN, NULL);
 
 }
@@ -746,6 +905,12 @@ static void wble_mgr_rxcb(struct os_event* ev) {
     int slen = strnlen(line, 100);
     if (slen==0) {
         // too short line ignore
+        return;
+    }
+    // Uart pass-thru mode : just send line up to the user
+    if (sm_getCurrentState(_ctx.mySMId)==MS_BLE_UART_RUNNING) {
+        log_debug("wbu:[%s]", line);
+        callCB(&_ctx, WBLE_UART_RX, (void*)line);
         return;
     }
     /* 

@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 #define DEVADDR_SZ  (6)
-typedef enum { WBLE_COMM_OK, WBLE_COMM_FAIL, WBLE_SCAN_RX_IB, WBLE_IB_CONN, WBLE_IB_DISC } WBLE_EVENT_t;
+typedef enum { WBLE_COMM_OK, WBLE_COMM_FAIL, WBLE_SCAN_RX_IB, WBLE_UART_CONN, WBLE_UART_DISC, WBLE_UART_RX } WBLE_EVENT_t;
 typedef struct ibeacon_data {
 //    uint8_t uuid[16];     // Not currently available or useful
     uint8_t devaddr[DEVADDR_SZ];
@@ -32,7 +32,7 @@ typedef struct ibeacon_data {
     bool new;
     uint8_t inULCnt;
 } ibeacon_data_t;
-typedef void (*WBLE_CB_FN_t)(WBLE_EVENT_t e, ibeacon_data_t* b);
+typedef void (*WBLE_CB_FN_t)(WBLE_EVENT_t e, void* data);      // data may be ibeacon entry or uart line or whatever
 
 void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect);
 
@@ -46,6 +46,12 @@ void wble_scan_stop(void* ctx);
 // configure ibeacon operation (when not scanning)
 void wble_ibeacon_start(void* ctx, const uint8_t* uuid, uint16_t maj, uint16_t min, uint8_t extra, uint16_t interMS, int8_t txpower);
 void wble_ibeacon_stop(void* ctx);
+// Open request for uarting to a remote BLE (via NUS)
+void wble_line_open(void* c);
+// Write data to remote
+int wble_line_write(void* c, uint8_t* data, uint32_t sz);
+// Close down uart connection
+void wble_line_close(void* c);
 
 // get number of ibs we have seen so far  (optionally count only those active in last X seconds if activeInLastX >0)
 int wble_getNbIBActive(void* c, uint32_t activeInLastX);

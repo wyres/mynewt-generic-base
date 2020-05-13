@@ -21,7 +21,7 @@ extern "C" {
 
 // Use this macro to define unique config key within your 'bloc'
 #define CFGKEY(__m, __k) (((__m & 0xff) << 8) | (__k & 0xff))
-typedef void (*CFG_CBFN_t)(uint16_t key);
+typedef void (*CFG_CBFN_t)(void* ctx, uint16_t key);
 
 bool CFMgr_registerCB(CFG_CBFN_t cb);
 bool CFMgr_addElementDef(uint16_t key, uint8_t len, void* initdata);
@@ -45,7 +45,7 @@ int CFMgr_getElement(uint16_t key, void* data, uint8_t maxlen);
 uint8_t CFMgr_getElementLen(uint16_t key);
 bool CFMgr_setElement(uint16_t key, void* data, uint8_t len);
 bool CFMgr_resetElement(uint16_t key);
-void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb);
+void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb, void* cbctx);
 
 // Define module ids here as unique values 1-255. Module 0 is for basic untilites (who can manage their keys between them..)
 // NEVER REDEFINE A VALUE UNLESS OK TO CLEAR DEVICE CONFIG AFTER UPGRADE

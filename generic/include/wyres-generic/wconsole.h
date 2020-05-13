@@ -19,8 +19,9 @@
 extern "C" {
 #endif
 
-typedef enum { ATCMD_OK, ATCMD_GENERR, ATCMD_BADARG } ATRESULT;
-typedef ATRESULT (*ATCMD_CBFN_t)(uint8_t nargs, char* argv[]);
+typedef enum { ATCMD_OK, ATCMD_GENERR, ATCMD_BADARG, ATCMD_BADCMD, ATCMD_PROCESSED } ATRESULT;
+typedef bool (*PRINTLN_t)(const char* l, ...);
+typedef ATRESULT (*ATCMD_CBFN_t)(PRINTLN_t pfn, uint8_t nargs, char* argv[]);
 typedef struct {
     const char* cmd;
     const char* desc;
@@ -34,7 +35,6 @@ void wconsole_start(uint8_t ncmds, ATCMD_DEF_t* cmds, uint32_t idleTimeoutS);
 void wconsole_stop();
 bool wconsole_isInit();
 bool wconsole_isActive();
-bool wconsole_println(const char* l, ...);
 
 #ifdef __cplusplus
 }

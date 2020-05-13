@@ -304,7 +304,7 @@ bool wconsole_isActive() {
     return false;
 }
 
-bool wconsole_println(const char* l, ...) {
+static bool wconsole_println(const char* l, ...) {
     bool ret = true;
     va_list vl;
     va_start(vl, l);
@@ -336,7 +336,7 @@ bool wconsole_println(const char* l, ...) {
     va_end(vl);
     return ret;
 }
-// callback every time the socket gives us a new line of data from the GPS
+// callback every time the socket gives us a new line of data 
 static void uart_mgr_rxcb(struct os_event* ev) {
     // ev->arg is our line buffer
     char* line = (char*)(ev->ev_arg);
@@ -356,11 +356,11 @@ static void processATCmd(char* line) {
     // first segment
     els[elsi++] = s;
     while (*s!=0 && elsi<5) {
-        if (*s==' ') {
-            // make end of string at white space
+        if (*s==' ' || *s=='=' || *s==',') {
+            // make end of string at seperator
             *s='\0';
             s++;
-            // consume blank space
+            // consume blank space (but not seperators)
             while(*s==' ') {
                 s++;
             }
@@ -385,14 +385,25 @@ static void processATCmd(char* line) {
             // gotcha
             log_debug("got cmd %s with %d args", els[0], elsi-1);
             // call the specific command processor function as registered
-            if ((*_ctx.cmds[i].fn)(elsi, els)!=ATCMD_OK) {
-                // error message : should be determined by return
-                wconsole_println("Error : bad args for %s : %s", _ctx.cmds[i].cmd, _ctx.cmds[i].desc);
+            ATRESULT res = (*_ctx.cmds[i].fn)(&wconsole_println, elsi, els);
+            switch(res) {
+                case ATCMD_OK: {
+                    wconsole_println("OK\r\n");
+                    break;
+                }
+                case ATCMD_GENERR: {
+                    wconsole_println("ERROR\r\n");
+                    break;
+                }
+                default:
+                    // Command processing already did return
+                    break;
             }
             return;
         }
     }
     // not found
+    wconsole_println("ERROR\r\n");
     wconsole_println("Unknown command [%s].", els[0]);
     log_debug("no cmd %s with %d args", els[0], elsi-1);
 }
