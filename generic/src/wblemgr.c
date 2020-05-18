@@ -86,7 +86,7 @@ static struct blectx {
 enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, MS_BLE_UART_CHECK, MS_BLE_UART_RUNNING,
     MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
 enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_START_SCAN, ME_BLE_START_IB, ME_BLE_STOP_SCAN, ME_BLE_STOP_IB, ME_BLE_RET_OK, ME_BLE_RET_ERR, ME_BLE_RET_INT,
-     ME_BLE_UPDATE, ME_BLE_UART_OK, ME_BLE_UART_NOK, ME_BLE_UART_CONN, ME_BLE_UART_DISC };
+     ME_BLE_UPDATE, ME_BLE_UART_OK, ME_BLE_UART_NOK, ME_BLE_UART_CONN, ME_BLE_UART_DISC, ME_CC_RETRY };
 
 // predeclare privates
 //static void wble_mgr_task(void* arg);
@@ -242,6 +242,7 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
+            sm_timer_stopE(ctx->mySMId, ME_CC_RETRY);       // As not stoppped automatically by change of state
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
@@ -249,18 +250,20 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             log_warn("BLE: no who");
             // if cb call it
             callCB(ctx, WBLE_COMM_FAIL, NULL);
-            
             return MS_BLE_OFF;
         }
-        case ME_BLE_RET_OK: {       // return is just OK or READY - really should wait for proper WHO response
-            log_debug("BLE: rewho");
+
+        case ME_BLE_RET_ERR: {
+            sm_timer_startE(ctx->mySMId, 500, ME_CC_RETRY);      // give it some space and retry
+            return SM_STATE_CURRENT;
+        }
+
+        case ME_CC_RETRY: {
+            // Retry after error (unless get a good reponse in meantime)
             wskt_write(ctx->cnx, (uint8_t*)BLE_CHECK, strlen(BLE_CHECK));
             return SM_STATE_CURRENT;
         }
         case ME_BLE_RET_INT: {        // return is an integer which is what we expect from WHO
-#ifdef DEBUG_BLE
-            log_debug("BLE: who=%d", (uint32_t)data);
-#endif
             // Normally the who response is the data value. Store it for later
             // from BLEV2 it is the firmware version stored in a uint16 (MSB=major, LSB=minor)
             ctx->fwVersionMaj = ((((uint32_t)data) >>8) & 0xFF);
@@ -275,7 +278,6 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             }
             // if cb call it
             callCB(ctx, WBLE_COMM_OK, NULL);
-
             return MS_BLE_ON;
         }
         case ME_BLE_UART_CONN: {
@@ -307,9 +309,10 @@ static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case ME_BLE_ON: {
-            // We are on
-            callCB(ctx, WBLE_COMM_OK, NULL);
-            return SM_STATE_CURRENT;
+            // We _are_ on - but we'll check with the BLE anyway before saying so
+            return MS_BLE_STARTING;
+//            callCB(ctx, WBLE_COMM_OK, NULL);
+//            return SM_STATE_CURRENT;
         }
         case ME_BLE_OFF: {
             return MS_BLE_STOPPINGCOMM;
@@ -368,6 +371,7 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
+            sm_timer_stopE(ctx->mySMId, ME_CC_RETRY);       // As not stoppped automatically by change of state
             // Stop scanner
             wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_STOP, strlen(BLE_SCAN_STOP));
             log_info("BLE:end scan %d %d %d %d %d", ctx->nbRxNew, ctx->nbRxNewR, ctx->nbRxUpdate, ctx->nbRxNoSpace, ctx->nbRxBadMajor);
@@ -425,6 +429,11 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case ME_BLE_RET_ERR: {
+            sm_timer_startE(ctx->mySMId, 500, ME_CC_RETRY);      // give it some space and retry
+            return SM_STATE_CURRENT;
+        }
+
+        case ME_CC_RETRY: {
             // retry scan command (assuming noone used txLine elsewhere!)
             wskt_write(ctx->cnx, (uint8_t*)(&ctx->txLine[0]), strlen(ctx->txLine));
 
@@ -456,12 +465,18 @@ static SM_STATE_ID_t State_CheckUARTConn(void* arg, int e, void* data) {
         case SM_ENTER: {
             // Send a "AT+CONN?" to check if cross connected to NUS serial BLE client already..
             // need a return of "2" to continue
-            wskt_write(ctx->cnx, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN));
-            sm_timer_start(ctx->mySMId, 1000);      // allow 1s for response
-            log_debug("BLU: check CC sent");
+            if (wskt_write(ctx->cnx, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN))<0) {
+                log_debug("BLU:CC fail");
+                // Give up
+                sm_sendEvent(ctx->mySMId, ME_BLE_UART_DISC, NULL);
+            } else {
+                sm_timer_startE(ctx->mySMId, 500, ME_CC_RETRY);      // allow 1s for response
+                log_debug("BLU:CC sent");
+            }
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
+            sm_timer_stopE(ctx->mySMId, ME_CC_RETRY);       // As not stoppped automatically by change of state
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
@@ -471,12 +486,23 @@ static SM_STATE_ID_t State_CheckUARTConn(void* arg, int e, void* data) {
             callCB(ctx, WBLE_COMM_FAIL, NULL);
             return MS_BLE_ON;
         }
+        case ME_CC_RETRY: {
+            if (wskt_write(ctx->cnx, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN))<0) {
+                log_warn("BLU:CC2 fail");
+                // if cb call it
+                callCB(ctx, WBLE_COMM_FAIL, NULL);
+                return MS_BLE_ON;
+            }
+            log_debug("BLU: CC2 sent");
+            sm_timer_start(ctx->mySMId, 500);           // give up next time
+            return SM_STATE_CURRENT;
+        }
         case ME_BLE_UART_DISC: {
             return MS_BLE_ON;       // abandon
         }
 
-        case ME_BLE_RET_OK: {       // return is just OK or READY - really should wait for proper AT+CONN? response
-            log_debug("BLU: comm ok - reCC");
+        case ME_BLE_RET_OK: {       // return is just OK or READY - must wait for proper AT+CONN? response
+            log_debug("BLU: cok-reCC");
             wskt_write(ctx->cnx, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN));
             return SM_STATE_CURRENT;
         }
@@ -666,7 +692,7 @@ int wble_line_write(void* c, uint8_t* data, uint32_t sz) {
     if (sm_getCurrentState(ctx->mySMId)==MS_BLE_UART_RUNNING) {
         return wskt_write(ctx->cnx, data, sz);
     }
-    return -1;       // No write for you my friend
+    return SKT_EINVAL;       // No write for you my friend
 }
 
 void wble_line_close(void* c) {

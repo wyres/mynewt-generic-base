@@ -37,7 +37,7 @@ static struct appctx {
     uint32_t baudrate;
     wskt_t* cnx;
     uint8_t rxbuf[WSKT_BUF_SZ+1];
-    uint8_t txbuf[MAX_TXSZ+1];
+    uint8_t txbuf[MAX_TXSZ+3];
     uint8_t ncmds;
     ATCMD_DEF_t* cmds;
 } _ctx = {
@@ -310,16 +310,15 @@ static bool wconsole_println(const char* l, ...) {
     va_start(vl, l);
     vsprintf((char*)&_ctx.txbuf[0], l, vl);
     int len = strnlen((const char*)&_ctx.txbuf[0], MAX_TXSZ);
-    if ((len)>=MAX_TXSZ) {
+    if (len>=MAX_TXSZ) {
         // oops might just have broken stuff...
-        _ctx.txbuf[MAX_TXSZ-1] = '\0';
+        len = MAX_TXSZ-1;
         ret = false;        // caller knows there was an issue
-    } else {
-        _ctx.txbuf[len]='\n';
-        _ctx.txbuf[len+1]='\r';
-        _ctx.txbuf[len+2]='\0';
-        len+=3;
     }
+    _ctx.txbuf[len]='\n';
+    _ctx.txbuf[len+1]='\r';         // This is to play nice with putty...
+    _ctx.txbuf[len+2]=0;
+    len+=2;     // Don't send the null byte!
     if (_ctx.cnx!=NULL) {
         int res = wskt_write(_ctx.cnx, &_ctx.txbuf[0], len);
         if (res<0) {

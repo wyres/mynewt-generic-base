@@ -225,8 +225,11 @@ static int uart_line_ioctl(wskt_t* skt, wskt_ioctl_t* cmd) {
         }
         // Flush any tx or rx bytes left hanging about
         case IOCTL_FLUSHTXRX: {
+            os_sr_t sr;
+            OS_ENTER_CRITICAL(sr);
             circ_bbuf_flush(&cfg->txBuff);
             circ_bbuf_flush(&cfg->rxBuff);
+            OS_EXIT_CRITICAL(sr);
             break;
         }
         case IOCTL_CHECKTX: {
@@ -256,7 +259,10 @@ static int uart_line_write(wskt_t* skt, uint8_t* data, uint32_t sz) {
     // IRQ disable TODO
     // copy it in
     for(int i=0; i<sz; i++) {
+        os_sr_t sr;
+        OS_ENTER_CRITICAL(sr);
         circ_bbuf_push(buf, data[i]);
+        OS_EXIT_CRITICAL(sr);
     }
     // IRQ enable
 
@@ -303,8 +309,8 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
     // if full or EOL, copy to all sockets (get list from wskt mgr)
     if (c==myCfg->eol || circ_bbuf_free_space(&(myCfg->rxBuff))==0) {
         // copy out line first to local STATIC buffer (stack space!)
-        // MUTEX
-        os_mutex_pend(&_lbMutex, OS_TIMEOUT_NEVER);
+        // MUTEX NOT REQUIRED IN ISR CALLED ROUTINE (normally)
+//        os_mutex_pend(&_lbMutex, OS_TIMEOUT_NEVER);
         uint8_t lineLen = 0;
         bool copied = false;
         while(!copied && lineLen<UART_LINE_SZ) {
@@ -324,7 +330,7 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
         }
         // Make it a null terminated string
         _lineBuffer[lineLen++] = 0;
-        os_mutex_release(&_lbMutex);
+//        os_mutex_release(&_lbMutex);
         // We don't give up empty lines
         if (lineLen>1) {
 //            log_uartbdg("%s got line", myCfg->dname);
@@ -362,7 +368,7 @@ static int uart_rx_cb(void* ctx, uint8_t c) {
 static int uart_tx_cb(void* ctx) {
     struct UARTDeviceCfg* myCfg = (struct UARTDeviceCfg*)ctx;
     // next char from circular bufer
-    // TODO protect circular buffer from modifs as this called on IRQ
+    // note that the circular buffer is protected from this IRQ CB via OS_ENTER/EXIT_CRITICAL() which disables IRQs
     uint8_t c;
     if (circ_bbuf_pop(&(myCfg->txBuff), &c)<0) {
         // No more data to tx

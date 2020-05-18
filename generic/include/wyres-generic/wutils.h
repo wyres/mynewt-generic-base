@@ -124,6 +124,11 @@ uint32_t Util_hashstrn(const char* s, int maxlen);
 */
 bool Util_notAll0(const uint8_t *p, uint8_t sz);
 
+uint8_t Util_hexdigit( char hex );
+uint8_t Util_hexbyte( const char* hex );
+/** convert a hex string to a byte array to avoid sscanf. Ensure 'out' is at least of size 'len'. Returns number of bytes successfully found */
+int Util_scanhex(char* in, int len, uint8_t* out);
+
 // Unittest support
 #if MYNEWT_VAL(UNITTEST) 
 #define UNITTEST (1)

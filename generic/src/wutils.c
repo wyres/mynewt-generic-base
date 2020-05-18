@@ -13,6 +13,7 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 #include "os/os.h"
 #include "bsp.h"
@@ -450,4 +451,26 @@ uint32_t Util_hashstrn(const char* s, int maxlen) {
     } 
 
     return h;
+}
+
+uint8_t Util_hexdigit( char hex )
+{
+    return (hex <= '9') ? hex - '0' : 
+                          toupper(hex) - 'A' + 10 ;
+}
+
+uint8_t Util_hexbyte( const char* hex )
+{
+    return (Util_hexdigit(*hex) << 4) | Util_hexdigit(*(hex+1));
+}
+/** convert a hex string to a byte array to avoid sscanf. Ensure 'out' is at least of size 'len'. Returns number of bytes successfully found */
+int Util_scanhex(char* in, int len, uint8_t* out) {
+    for(int i=0;i<len;i++) {
+        // Check haven't reach string end and that chars are hex digits
+        if (in[i*2]=='\0' || !isxdigit(in[i*2]) || !isxdigit(in[i*2+1])) {
+            return i;
+        }
+        out[i] = Util_hexbyte(&in[i*2]);
+    }
+    return len;     // got them all
 }
