@@ -511,18 +511,14 @@ static SM_STATE_ID_t State_CheckUARTConn(void* arg, int e, void* data) {
             log_debug("BLU: con status=%d", (uint32_t)data);
 #endif
             // 0=no ble nus client, 1=ble nus client but not connected to uart, 2=cross-connection so go!
-            if (((uint32_t)data) == 2) {
-                log_debug("BLU: cc ok");
-                // if cb call it
-                callCB(ctx, WBLE_UART_CONN, NULL);
-                
+            if (((uint32_t)data) == 2) {                
                 // Go and enable serial connections from remote people
                 return MS_BLE_UART_RUNNING;
             } else {
                 log_debug("BLU: no cc (%d)", (uint32_t)data);
                 // if cb call it
                 callCB(ctx, WBLE_UART_DISC, NULL);
-                
+                // And back to on
                 return MS_BLE_ON;
             }
         }
@@ -544,6 +540,8 @@ static SM_STATE_ID_t State_UARTRunning(void* arg, int e, void* data) {
     switch(e) {
         case SM_ENTER: {
             log_info("BLU:serialing");
+            // if cb call it (now we are in the right state, so if user writes to line it should go thru)
+            callCB(ctx, WBLE_UART_CONN, NULL);
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {

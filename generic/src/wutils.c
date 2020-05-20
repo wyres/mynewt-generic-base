@@ -156,7 +156,7 @@ static void do_log(char lev, const char* ls, va_list vl) {
     _buf[len]='\n';
     _buf[len+1]='\r';
     _buf[len+2]='\0';
-    len+=3;
+    len+=2;     // don't include null
     // send to mynewt logger if enabled
     if (_useConsole) {
         console_write(_buf, len);
