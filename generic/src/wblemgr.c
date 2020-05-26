@@ -30,6 +30,11 @@
 //#define WBLE_TASK_STACK_SZ   OS_STACK_ALIGN(256)
 //#define MAX_IBEACONS    MYNEWT_VAL(WBLE_MAXIBS)
 
+#define UART_ENABLE_TIMEMS (100)
+#define UART_CMD_RETRY_TIMEMS (200)
+
+static char* BLE_PAD="\n\n\n\n";        // to sync uart after wakeup
+
 static char* BLE_CHECK="AT+WHO\r\n";
 // Latest version of BLE scanner using push mode works best for large numbers of BLE devices scanned...
 static char* BLE_RXMODE="AT+PUSH\r\n";
@@ -57,6 +62,7 @@ static struct blectx {
     const char* uartDevice;
     uint32_t baudrate;
     int8_t pwrPin;
+    int8_t uartPin;
     int8_t uartSelect;
     wskt_t* cnx;
     uint8_t rxbuf[WSKT_BUF_SZ+1];
@@ -83,7 +89,7 @@ static struct blectx {
 } _ctx;     // in bss so set to all 0 by definition
 
 // State machine for BLE control
-enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, MS_BLE_UART_CHECK, MS_BLE_UART_RUNNING,
+enum BLEStates { MS_BLE_OFF, MS_BLE_WAITPOWERON, MS_BLE_STARTING, MS_BLE_ON, MS_BLE_SCANNING, MS_BLE_UART_CHECK, MS_BLE_UART_RUNNING, MS_BLE_START_IB, 
     MS_BLE_STOPPINGCOMM, MS_BLE_LAST };
 enum BLEEvents { ME_BLE_ON, ME_BLE_OFF, ME_BLE_START_SCAN, ME_BLE_START_IB, ME_BLE_STOP_SCAN, ME_BLE_STOP_IB, ME_BLE_RET_OK, ME_BLE_RET_ERR, ME_BLE_RET_INT,
      ME_BLE_UPDATE, ME_BLE_UART_OK, ME_BLE_UART_NOK, ME_BLE_UART_CONN, ME_BLE_UART_DISC, ME_CC_RETRY };
@@ -105,6 +111,25 @@ static void callCB(struct blectx* ctx, WBLE_EVENT_t e, void* d) {
     }
 }
 
+static void powerRequest(bool state) {
+    // Power up/down using power pin if required
+    if (_ctx.pwrPin<0) {
+        log_debug("BLE: no power control");
+    } else {
+        GPIO_write(_ctx.pwrPin, state?0:1);     // yup pull down for ON, up for OFF
+        log_debug("BLE: power [%d]:%s", _ctx.pwrPin, state?"ON":"OFF");
+    }
+}
+static void uartRequest(bool state) {
+    // ask ble to turn its uart on via io pin if required
+    if (_ctx.uartPin<0) {
+        log_debug("BLE: no uart control");
+    } else {
+        GPIO_write(_ctx.uartPin, state?0:1);     // yup pull down for active, up for inactive (as the base card inverts the signal)
+        log_debug("BLE: uart [%d]:%s", _ctx.uartPin, state?"ON":"OFF");
+    }
+}
+
 static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
@@ -113,14 +138,8 @@ static SM_STATE_ID_t State_Off(void* arg, int e, void* data) {
             if (ctx->cnx!=NULL) {
                 wskt_close(&ctx->cnx);      // nulls our cnx id also
             }
-    
-            if (ctx->pwrPin>=0) {
-                log_debug("BLE: OFF pin %d", ctx->pwrPin);
-                // TODO add a battery check before and after power on as this could be nice to detect battery end of life
-                GPIO_write(ctx->pwrPin, 1);     // yup pull UP for OFF
-            } else {
-                log_debug("BLE: always on?");
-            }
+            powerRequest(false);
+            uartRequest(false);
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -155,13 +174,9 @@ static SM_STATE_ID_t State_WaitPoweron(void* arg, int e, void* data) {
                 sm_sendEvent(ctx->mySMId, ME_BLE_UART_NOK, NULL);
                 return SM_STATE_CURRENT;
             }
-            // Power up using power pin if required
-            if (ctx->pwrPin<0) {
-                log_debug("BLE: always on?");
-            } else {
-                GPIO_write(ctx->pwrPin, 0);     // yup pull down for ON
-                log_debug("BLE: ON pin %d", ctx->pwrPin);
-            }
+            powerRequest(true);     // power up BLE if needed
+            uartRequest(true);      // request uart comm to BLE
+
             // And set the timer for the powerup time to finish (also serves as timeout for the flush wait)
             sm_timer_start(ctx->mySMId, 500);
             return SM_STATE_CURRENT;
@@ -235,10 +250,11 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
-            // Send who command to ensure comm ok
-            wskt_write(ctx->cnx, (uint8_t*)BLE_CHECK, strlen(BLE_CHECK));
-            sm_timer_start(ctx->mySMId, 1000);      // allow 1s for response
-            log_debug("BLE: check who");
+            uartRequest(true);      // request uart comm to BLE
+
+            sm_timer_startE(ctx->mySMId, UART_ENABLE_TIMEMS, ME_CC_RETRY);      // give it some time to start its uart
+
+            sm_timer_start(ctx->mySMId, 1000);      // allow 1s for response overall
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -253,16 +269,19 @@ static SM_STATE_ID_t State_Starting(void* arg, int e, void* data) {
             return MS_BLE_OFF;
         }
 
-        case ME_BLE_RET_ERR: {
-            sm_timer_startE(ctx->mySMId, 500, ME_CC_RETRY);      // give it some space and retry
-            return SM_STATE_CURRENT;
-        }
-
         case ME_CC_RETRY: {
-            // Retry after error (unless get a good reponse in meantime)
+            // Send who command to ensure comm ok
+            log_debug("BLE: who-?");
             wskt_write(ctx->cnx, (uint8_t*)BLE_CHECK, strlen(BLE_CHECK));
             return SM_STATE_CURRENT;
         }
+
+        case ME_BLE_RET_ERR: {
+            log_debug("BLE: who-X");
+            sm_timer_startE(ctx->mySMId, UART_CMD_RETRY_TIMEMS, ME_CC_RETRY);      // give it some space and retry
+            return SM_STATE_CURRENT;
+        }
+
         case ME_BLE_RET_INT: {        // return is an integer which is what we expect from WHO
             // Normally the who response is the data value. Store it for later
             // from BLEV2 it is the firmware version stored in a uint16 (MSB=major, LSB=minor)
@@ -300,22 +319,23 @@ static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
+            sm_timer_start(ctx->mySMId, 500);   // Set timer to disable uart in a mo (let previous state's uart tx's drain first)
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
+            uartRequest(false);      // BLE can deinit its uart as we're not actively talking to it (required for low power!)
             return SM_STATE_CURRENT;
         }
         case ME_BLE_ON: {
             // We _are_ on - but we'll check with the BLE anyway before saying so
             return MS_BLE_STARTING;
-//            callCB(ctx, WBLE_COMM_OK, NULL);
-//            return SM_STATE_CURRENT;
         }
         case ME_BLE_OFF: {
-            return MS_BLE_STOPPINGCOMM;
+            // Nothing happening, go off
+            return MS_BLE_OFF;
         }            
         case ME_BLE_START_SCAN: {
             // Start scanning - always allowed
@@ -330,15 +350,17 @@ static SM_STATE_ID_t State_On(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case ME_BLE_START_IB: {
-            // beaconning is not a state so can just request it any time
             log_info("BLE:ib go");
-            sendIBStart(ctx);
-            return SM_STATE_CURRENT;
+            return MS_BLE_START_IB;
         }            
         case ME_BLE_STOP_IB: {
             // beaconning is not a state so can just request it any time
             log_info("BLE:ib end");
+            // This is not optimum... TODO
+            uartRequest(true);
+            wskt_write(ctx->cnx, (uint8_t*)BLE_PAD, strlen(BLE_PAD));       // sync uart
             sendIBStop(ctx);
+            uartRequest(false);
             return SM_STATE_CURRENT;
         }            
         default: {
@@ -353,19 +375,10 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
-            // rx data mode is PUSH
-            wskt_write(ctx->cnx, (uint8_t*)BLE_RXMODE, strlen(BLE_RXMODE));
-            // And start the scanning - create the start command dynamically to include UUID
-            if (Util_notAll0(ctx->uuid,UUID_SZ)==true) {
-                sprintf(ctx->txLine,"AT+START,%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n",
-                    ctx->uuid[0],ctx->uuid[1],ctx->uuid[2],ctx->uuid[3],ctx->uuid[4],ctx->uuid[5],ctx->uuid[6],ctx->uuid[7],
-                    ctx->uuid[8],ctx->uuid[9],ctx->uuid[10],ctx->uuid[11],ctx->uuid[12],ctx->uuid[13],ctx->uuid[14],ctx->uuid[15]);    
-            } else {
-                sprintf(ctx->txLine,"AT+START\r\n");
-            }
-            log_debug(ctx->txLine); 
-            wskt_write(ctx->cnx, (uint8_t*)(&ctx->txLine[0]), strlen(ctx->txLine));
-            // remind every second
+            uartRequest(true);      // request uart comm to BLE
+            // And wait a little to ensure other end is listening
+            sm_timer_startE(ctx->mySMId, UART_ENABLE_TIMEMS, ME_CC_RETRY);
+            // remind every second we're in push
             sm_timer_start(ctx->mySMId, 1000);
             log_info("BLE:scanning[%d->%d]", ctx->majorStart, ctx->majorEnd);
             return SM_STATE_CURRENT;
@@ -383,7 +396,26 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             sm_timer_start(ctx->mySMId, 1000);
             return SM_STATE_CURRENT;
         }
-        // go direct to off if requested
+        
+        case ME_CC_RETRY: {
+            // (re)try scan command (assuming noone used txLine elsewhere!)
+            // rx data mode is PUSH
+            wskt_write(ctx->cnx, (uint8_t*)BLE_RXMODE, strlen(BLE_RXMODE));
+            // And start the scanning - create the start command dynamically to include UUID
+            if (Util_notAll0(ctx->uuid,UUID_SZ)==true) {
+                sprintf(ctx->txLine,"AT+START,%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n",
+                    ctx->uuid[0],ctx->uuid[1],ctx->uuid[2],ctx->uuid[3],ctx->uuid[4],ctx->uuid[5],ctx->uuid[6],ctx->uuid[7],
+                    ctx->uuid[8],ctx->uuid[9],ctx->uuid[10],ctx->uuid[11],ctx->uuid[12],ctx->uuid[13],ctx->uuid[14],ctx->uuid[15]);    
+            } else {
+                sprintf(ctx->txLine,"AT+START\r\n");
+            }
+            log_debug(ctx->txLine); 
+            wskt_write(ctx->cnx, (uint8_t*)(&ctx->txLine[0]), strlen(ctx->txLine));
+
+            return SM_STATE_CURRENT;
+        }
+
+        // go to off (via exit and delay to get the STOP to the ble)
         case ME_BLE_OFF: {
             return MS_BLE_STOPPINGCOMM;
         }       
@@ -409,10 +441,9 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
         }            
         // Can ignore a start scan request? - no might have changed uuid
         case ME_BLE_START_SCAN: {
-            // Deal with it by returning to ON, AND resending the start event so we come back here...
-            sm_sendEvent(ctx->mySMId, ME_BLE_START_SCAN, NULL);
-            // Back to idle but on mode (exit does the stop)
-            return MS_BLE_ON;
+            // just send ourselves a CC_RETRY to redo start
+            sm_sendEvent(ctx->mySMId, ME_CC_RETRY, NULL);
+            return SM_STATE_CURRENT;
         }
         case ME_BLE_UART_CONN: {
             // Not allowed
@@ -429,16 +460,10 @@ static SM_STATE_ID_t State_Scanning(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case ME_BLE_RET_ERR: {
-            sm_timer_startE(ctx->mySMId, 500, ME_CC_RETRY);      // give it some space and retry
+            sm_timer_startE(ctx->mySMId, UART_CMD_RETRY_TIMEMS, ME_CC_RETRY);      // give it some space and retry
             return SM_STATE_CURRENT;
         }
 
-        case ME_CC_RETRY: {
-            // retry scan command (assuming noone used txLine elsewhere!)
-            wskt_write(ctx->cnx, (uint8_t*)(&ctx->txLine[0]), strlen(ctx->txLine));
-
-            return SM_STATE_CURRENT;
-        }
         case ME_BLE_UPDATE: {
             // uart callback parsed lines and updates the list of currently visible ibeacons
             // data is directly the index in list TODO could be out of date.... too bad...
@@ -463,16 +488,12 @@ static SM_STATE_ID_t State_CheckUARTConn(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
-            // Send a "AT+CONN?" to check if cross connected to NUS serial BLE client already..
-            // need a return of "2" to continue
-            if (wskt_write(ctx->cnx, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN))<0) {
-                log_debug("BLU:CC fail");
-                // Give up
-                sm_sendEvent(ctx->mySMId, ME_BLE_UART_DISC, NULL);
-            } else {
-                sm_timer_startE(ctx->mySMId, 500, ME_CC_RETRY);      // allow 1s for response
-                log_debug("BLU:CC sent");
-            }
+            uartRequest(true);      // request uart comm to BLE
+
+            sm_timer_startE(ctx->mySMId, UART_ENABLE_TIMEMS, ME_CC_RETRY);      // wait for uart to be ready
+
+            sm_timer_start(ctx->mySMId, 500);           // give up if no response in this time
+
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -487,6 +508,8 @@ static SM_STATE_ID_t State_CheckUARTConn(void* arg, int e, void* data) {
             return MS_BLE_ON;
         }
         case ME_CC_RETRY: {
+            // Send a "AT+CONN?" to check if cross connected to NUS serial BLE client already..
+            // need a return of "2" to continue
             if (wskt_write(ctx->cnx, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN))<0) {
                 log_warn("BLU:CC2 fail");
                 // if cb call it
@@ -494,7 +517,6 @@ static SM_STATE_ID_t State_CheckUARTConn(void* arg, int e, void* data) {
                 return MS_BLE_ON;
             }
             log_debug("BLU: CC2 sent");
-            sm_timer_start(ctx->mySMId, 500);           // give up next time
             return SM_STATE_CURRENT;
         }
         case ME_BLE_UART_DISC: {
@@ -503,7 +525,12 @@ static SM_STATE_ID_t State_CheckUARTConn(void* arg, int e, void* data) {
 
         case ME_BLE_RET_OK: {       // return is just OK or READY - must wait for proper AT+CONN? response
             log_debug("BLU: cok-reCC");
-            wskt_write(ctx->cnx, (uint8_t*)BLE_CHECKCONN, strlen(BLE_CHECKCONN));
+            sm_timer_startE(ctx->mySMId, UART_CMD_RETRY_TIMEMS, ME_CC_RETRY);      // wait for uart to be ready
+            return SM_STATE_CURRENT;
+        }
+        case ME_BLE_RET_ERR: {       // return is just OK or READY - must wait for proper AT+CONN? response
+            log_debug("BLU: cok-reCC");
+            sm_timer_startE(ctx->mySMId, UART_CMD_RETRY_TIMEMS, ME_CC_RETRY);      // wait for uart to be ready
             return SM_STATE_CURRENT;
         }
         case ME_BLE_RET_INT: {        // return is an integer which tells us connection status
@@ -579,13 +606,79 @@ static SM_STATE_ID_t State_UARTRunning(void* arg, int e, void* data) {
     assert(0);      // shouldn't get here
 }
 
+
+// start ibeaconning and return to ON once confirmed
+static SM_STATE_ID_t State_StartIB(void* arg, int e, void* data) {
+    struct blectx* ctx = (struct blectx*)arg;
+    switch(e) {
+        case SM_ENTER: {
+            uartRequest(true);      // request uart comm to BLE
+
+            sm_timer_startE(ctx->mySMId, UART_ENABLE_TIMEMS, ME_CC_RETRY);      // wait for uart to be ready to send command
+
+            // and overall timer in case of no response
+            sm_timer_start(ctx->mySMId, 500);          
+
+            return SM_STATE_CURRENT;
+        }
+        case SM_EXIT: {
+            sm_timer_stopE(ctx->mySMId, ME_CC_RETRY);       // As not stoppped automatically by change of state
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
+            // No response, back to on
+            log_warn("BLU: no IB Resp");
+            callCB(ctx, WBLE_COMM_FAIL, NULL);
+            return MS_BLE_ON;
+        }
+        case ME_CC_RETRY: {
+            // Send the ib start command
+            sendIBStart(ctx);
+            log_debug("BLU: ib start sent");
+            return SM_STATE_CURRENT;
+        }
+        case ME_BLE_UART_DISC: {
+            callCB(ctx, WBLE_COMM_FAIL, NULL);
+            return MS_BLE_ON;       // abandon
+        }
+
+        case ME_BLE_RET_OK: {       // return is just OK or READY
+            log_debug("BLU: ib ok");
+            callCB(ctx, WBLE_COMM_IB_RUNNING, NULL);        // Tell user
+            return MS_BLE_ON;
+        }
+        case ME_BLE_RET_ERR: {       // return is ERROR
+            log_debug("BLU: ib nok");
+            // Retry...
+            sm_timer_startE(ctx->mySMId, UART_CMD_RETRY_TIMEMS, ME_CC_RETRY); 
+            return SM_STATE_CURRENT;
+        }
+        case ME_BLE_RET_INT: {        // not expected an int return
+            log_debug("BLU: con status=%d", (uint32_t)data);
+            // retry
+            sm_timer_startE(ctx->mySMId, UART_CMD_RETRY_TIMEMS, ME_CC_RETRY); 
+            return SM_STATE_CURRENT;
+        }
+        case ME_BLE_OFF: {
+            // gave up - shut down
+            callCB(ctx, WBLE_COMM_FAIL, NULL);
+            return MS_BLE_STOPPINGCOMM;
+        }            
+        default: {
+            sm_default_event_log(ctx->mySMId, "BLU", e);
+            return SM_STATE_CURRENT;
+        }
+    }
+    assert(0);      // shouldn't get here
+}
+
+
 // delay before closing connection for any last requests
 static SM_STATE_ID_t State_StoppingComm(void* arg, int e, void* data) {
     struct blectx* ctx = (struct blectx*)arg;
     switch(e) {
         case SM_ENTER: {
-            // Ensure asked to stop scanning
-            wskt_write(ctx->cnx, (uint8_t*)BLE_SCAN_STOP, strlen(BLE_SCAN_STOP));
+            // Just delays before going back to OFF
             sm_timer_start(ctx->mySMId, 500);
             return SM_STATE_CURRENT;
         }
@@ -621,11 +714,12 @@ static const SM_STATE_t _bleSM[MS_BLE_LAST] = {
     {.id=MS_BLE_SCANNING,   .name="BleScanning", .fn=State_Scanning},    
     {.id=MS_BLE_UART_CHECK,   .name="BleUARTCheck", .fn=State_CheckUARTConn},    
     {.id=MS_BLE_UART_RUNNING,   .name="BleUARTRun", .fn=State_UARTRunning},    
+    {.id=MS_BLE_START_IB,   .name="BleStartIB", .fn=State_StartIB},    
     {.id=MS_BLE_STOPPINGCOMM, .name="BleStopping", .fn=State_StoppingComm},    
 };
 
 // Called from sysinit via reference in pkg.yml
-void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect) {
+void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartPin, int8_t uartSelect) {
     // Ignore multiple inits as this code can't handle them....
     // TODO if required to support multiple BLEs on multiple UARTs....
     if (_ctx.uartDevice!=NULL) {
@@ -642,9 +736,14 @@ void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t 
     _ctx.baudrate = baudrate;
     _ctx.uartSelect=uartSelect;
     _ctx.pwrPin = pwrPin;
+    _ctx.uartPin = uartPin;
     if (_ctx.pwrPin>=0) {
         // Note 1 is OFF so start with it off
         GPIO_define_out("blepower", _ctx.pwrPin, 1, LP_DEEPSLEEP, PULL_UP);
+    }
+    if (_ctx.uartPin>=0) {
+        // Note 1 is OFF so start with it off
+        GPIO_define_out("bleuart", _ctx.uartPin, 1, LP_DEEPSLEEP, PULL_UP);
     }
     // create event with arg pointing to our line buffer
     // TODO how to tell driver limit of size of buffer???

@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 #define DEVADDR_SZ  (6)
-typedef enum { WBLE_COMM_OK, WBLE_COMM_FAIL, WBLE_SCAN_RX_IB, WBLE_UART_CONN, WBLE_UART_DISC, WBLE_UART_RX } WBLE_EVENT_t;
+typedef enum { WBLE_COMM_OK, WBLE_COMM_FAIL, WBLE_SCAN_RX_IB, WBLE_UART_CONN, WBLE_UART_DISC, WBLE_UART_RX, WBLE_COMM_IB_RUNNING, WBLE_COMM_IB_STOPPED } WBLE_EVENT_t;
 typedef struct ibeacon_data {
 //    uint8_t uuid[16];     // Not currently available or useful
     uint8_t devaddr[DEVADDR_SZ];
@@ -34,7 +34,7 @@ typedef struct ibeacon_data {
 } ibeacon_data_t;
 typedef void (*WBLE_CB_FN_t)(WBLE_EVENT_t e, void* data);      // data may be ibeacon entry or uart line or whatever
 
-void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartSelect);
+void* wble_mgr_init(const char* dname, uint32_t baudrate, int8_t pwrPin, int8_t uartPin, int8_t uartSelect);
 
 // start connection
 void wble_start(void* ctx, WBLE_CB_FN_t cb);
