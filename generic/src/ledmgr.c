@@ -175,8 +175,8 @@ static int checkLED(int8_t gpio) {
         _leds[r].active = false;
         _leds[r].cur.pattern = 0;
         _leds[r].next.pattern = 0;
-        // Setup io : using IO mgr to deal with deep sleep entry/exit. 
-        GPIO_define_out("LED", gpio, 0, LP_DOZE, HIGH_Z);
+        // Setup io : using IO mgr to deal with sleep entry/exit. Our main loop keeps LP from going further than DOZE if an led is active
+        GPIO_define_out("LED", gpio, 0, LP_SLEEP, HIGH_Z);
         // Each entry has its own timer, where the arg in the event for the timer callback is the gpio value...
         os_callout_init(&(_leds[r].durTimer), os_eventq_dflt_get(),
                     &led_dur_ev_cb, (void*)(&_leds[r]));
@@ -225,7 +225,7 @@ static void led_mgr_task(void* arg) {
         }
         // wait 100ms to change led states IFF led pattern running, else wait on semaphore for new request
         if (patternActive) {
-            LPMgr_setLPMode(_lpUserId, LP_SLEEP);       // don't want deep sleep if leds running...
+            LPMgr_setLPMode(_lpUserId, LP_SLEEP);       // if leds running then keep at lp level where their gpios are active ie SLEEP...
             /* Wait 100ms (or 1second divided by the number of time slices per sec) - this yields the CPU */
             os_time_delay(OS_TICKS_PER_SEC/LED_SLICES_PER_SEC);
         } else {
@@ -273,6 +273,8 @@ static void lp_change(LP_MODE_t oldmode, LP_MODE_t newmode) {
         // stop any running LEDs
         for(int r=0;r<_ledRefsSz;r++) {
             _leds[r].active=false;
+            // Make sure its off (if gpiomgr has already de-inited it its ok)
+            GPIO_write(_leds[r].gpio, 0);
             // Ensure no timer running
             stopLEDTimer(r);
         }

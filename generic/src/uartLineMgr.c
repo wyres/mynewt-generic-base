@@ -292,7 +292,7 @@ static int uart_line_close(wskt_t* skt) {
             }
         }
         if (allClosed) {
-            LPMgr_setLPMode(_lpUserId, LP_DEEPSLEEP);
+            LPMgr_setLPMode(_lpUserId, LP_OFF);     // no more uart cnx open, low power can go as deep as you want!
         }
     }
     // leave any buffers to be tx'd in their own time

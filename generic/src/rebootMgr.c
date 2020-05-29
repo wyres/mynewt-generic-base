@@ -32,10 +32,6 @@
 // Led task should be high pri as does very little but wants to do it in real time
 #define WATCHDOG_TASK_PRIO       MYNEWT_VAL(WATCHDOG_TASK_PRIO)
 #define WATCHDOG_TASK_STACK_SZ   OS_STACK_ALIGN(64)
-// Select watchog timeout based on requested type
-#define WATCHDOG_TIMEOUT_SECS   (MYNEWT_VAL(WATCHDOG_TIMEOUT_TYPE)==0?\
-                                    0:(MYNEWT_VAL(WATCHDOG_TIMEOUT_TYPE)==1?\
-                                    (MAX_MCU_WATCHDOG_SECS-1):MYNEWT_VAL(WATCHDOG_TIMEOUT_MINS)*60))
 
 #define REBOOT_LIST_SZ  (8)
 #define FN_LIST_SZ  (8*8)   // for 8 entries, each of 2 uint32_ts
@@ -48,6 +44,8 @@ static uint8_t _rebootReasonList[REBOOT_LIST_SZ+1];
 static uint8_t _fnList[FN_LIST_SZ+1];
 
 static void* _assertCallerFn = 0;
+
+static void watchdog_init(bool useHAL, uint32_t timeoutSecs);
 
 static enum RM_reason mapHalResetCause() {
     switch(hal_reset_cause()) {
@@ -109,7 +107,13 @@ void reboot_init(void) {
     }
     // If OS not doing watchdog then enable our management of it
 #if MYNEWT_VAL(WATCHDOG_INTERVAL) == 0
-    RMMgr_watchdog_init(WATCHDOG_TIMEOUT_SECS);
+// Start watchog based on requested type (type=0 -> no watchdog)
+#if MYNEWT_VAL(WATCHDOG_TIMEOUT_TYPE)==1
+    watchdog_init(true, (MAX_MCU_WATCHDOG_SECS-1));
+#endif
+#if MYNEWT_VAL(WATCHDOG_TIMEOUT_TYPE)==2
+    watchdog_init(false, MYNEWT_VAL(WATCHDOG_TIMEOUT_MINS)*60);
+#endif
 #endif
 }
 
@@ -200,8 +204,10 @@ static struct {
     uint32_t    last_tickleTS;
     struct os_callout timer;
     bool isEnabled;
+    bool isHAL;     // should we use hal/hardware watchdog?
 } _awctx;
 
+// Task responsible for tickling watchdog (any kind) at least once during the timeout
 static void watchdog_task(void* arg) {
     while(1) {
         RMMgr_watchdog_tickle();
@@ -210,30 +216,41 @@ static void watchdog_task(void* arg) {
     }
 }
 
+// watchdog check for 'os level' watchdog : check got tickled recently
 static void app_watchdog_timeoutcb(struct os_event *d) {
     // are we enabled, and if so, did we get tickled recently?
     if (_awctx.isEnabled && (TMMgr_getRelTimeSecs()-_awctx.last_tickleTS) > _awctx.timeoutMS) {
-        // no, rbye bye
+        // no, bye bye via assert
         assert(0);
     }
     // yes, restart timer
     os_callout_reset(&_awctx.timer, os_time_ms_to_ticks32(_awctx.timeoutMS));
 }
-void RMMgr_watchdog_init(uint32_t timeoutsecs) {
+
+// Initialise watchdog function
+static void watchdog_init(bool useHAL, uint32_t timeoutsecs) {
     _awctx.isEnabled = false;
     _awctx.timeoutMS = timeoutsecs*1000;
+    _awctx.isHAL = useHAL;
+    _awctx.last_tickleTS = TMMgr_getRelTimeSecs();
+
     if (timeoutsecs==0) {
         return;     // 0 means disabled 
     }
+    if (useHAL && (timeoutsecs > MAX_MCU_WATCHDOG_SECS)) {
+        assert(0);      // can't use hal for a watchdog timeout greater than a certain value
+    }
+
     // Create task to tickle watchdog from default task
     os_task_init(&_awctx.watchdog_task_str, "watchdog", &watchdog_task, NULL, WATCHDOG_TASK_PRIO,
                  OS_WAIT_FOREVER, _awctx.watchdog_task_stack, WATCHDOG_TASK_STACK_SZ);
     // deal with watchdog here if OS not doing to (interval at 0 means app responsible)
     // If the watchdog is set to less than the MCU max we can use the MCU internal watchdog timer (which is very low level and robust)
-    if (timeoutsecs < MAX_MCU_WATCHDOG_SECS) {
+    if (_awctx.isHAL) {
         // init watchdog
         hal_watchdog_init(_awctx.timeoutMS);       // 28s is the max...
     } else {
+        // Create timeout timer that will check for tickle...
         os_callout_init(&_awctx.timer, os_eventq_dflt_get(), app_watchdog_timeoutcb, NULL);
         os_callout_reset(&_awctx.timer, os_time_ms_to_ticks32(_awctx.timeoutMS));
     }
@@ -245,7 +262,7 @@ void RMMgr_watchdog_enable() {
         return;         // ignore
     }
     // Are we using MCU or OS timer watchdogs?
-    if (_awctx.timeoutMS < (MAX_MCU_WATCHDOG_SECS*1000)) {
+    if (_awctx.isHAL) {
         // start it
         hal_watchdog_enable();       
     } else {
@@ -258,7 +275,7 @@ void RMMgr_watchdog_disable() {
         return;         // ignore
     }
     // Are we using MCU or OS timer watchdogs?
-    if (_awctx.timeoutMS < (MAX_MCU_WATCHDOG_SECS*1000)) {
+    if (_awctx.isHAL) {
         // oops cant do that - ensure we know...
         assert(0);
     } else {
@@ -271,9 +288,10 @@ void RMMgr_watchdog_tickle() {
         return;         // ignore
     }
     // Are we using MCU or OS timer watchdogs?
-    if (_awctx.timeoutMS < (MAX_MCU_WATCHDOG_SECS*1000)) {
+    if (_awctx.isHAL) {
+        // Only call hal watchdog fn if its in use as doesn't like it otherwise...
         hal_watchdog_tickle();
-    } else {
-        _awctx.last_tickleTS = TMMgr_getRelTimeSecs();
     }
+    // update timestamp (this is tickle for os case) for both cases
+    _awctx.last_tickleTS = TMMgr_getRelTimeSecs();
 }
