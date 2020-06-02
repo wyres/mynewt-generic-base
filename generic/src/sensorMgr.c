@@ -171,7 +171,7 @@ bool SRMgr_defineButton(int8_t gpio) {
 
         // if a button is enabled, its IRQ etc runs all the time even during deepsleep
         // Same callback used for all buttons with arg being the gpio for the button
-        GPIO_define_irq("button", gpio, buttonCB, (void*)((int)gpio), HAL_GPIO_TRIG_BOTH, HAL_GPIO_PULL_UP, LP_DEEPSLEEP, PULL_DOWN); //TODO : double check "PULL_DOWN"
+        GPIO_define_irq("button", gpio, buttonCB, (void*)((int)gpio), HAL_GPIO_TRIG_BOTH, HAL_GPIO_PULL_UP, LP_DEEPSLEEP, PULL_UP);
         return true;
     }
     return false;
