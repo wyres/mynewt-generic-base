@@ -33,8 +33,8 @@ void RMMgr_addLogFn(void* caller);
 // Get a logged fn pointer (offset is the 'last but N' value)
 void* RMMgr_getLogFn(uint8_t offset);
 
-enum RM_reason { RM_HARD_RESET = 0, RM_ASSERT, RM_WATCHDOG, RM_RADIO_ERR, RM_HW_ERR, RM_DM_ACTION, RM_AT_ACTION, 
-    RM_HW_BROWNOUT, RM_HW_WG, RM_HW_NRST, RM_HW_BLAMES_SW, RM_ENTER_STOCK_MODE };
+enum RM_reason { RM_HARD_RESET = 0, RM_ASSERT, RM_SW_WG, RM_RADIO_ERR, RM_HW_ERR, RM_DM_ACTION, RM_AT_ACTION, 
+    RM_HW_BROWNOUT, RM_HW_WG, RM_HW_NRST, RM_HW_BLAMES_SW, RM_ENTER_STOCK_MODE, RM_HW_POR };
 
 void RMMgr_watchdog_enable();
 void RMMgr_watchdog_disable();

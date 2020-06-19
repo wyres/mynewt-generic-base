@@ -49,8 +49,6 @@ static void watchdog_init(bool useHAL, uint32_t timeoutSecs);
 
 static enum RM_reason mapHalResetCause() {
     switch(hal_reset_cause()) {
-        case HAL_RESET_POR:
-            return RM_HARD_RESET;
         case HAL_RESET_BROWNOUT:
             return RM_HW_BROWNOUT;
         case HAL_RESET_PIN:
@@ -59,8 +57,11 @@ static enum RM_reason mapHalResetCause() {
             return RM_HW_WG;
         case HAL_RESET_SOFT:
             return RM_HW_BLAMES_SW;
+        case HAL_RESET_POR:
+            return RM_HW_POR;
         default:
-            return RM_HARD_RESET;
+            // Assume power on
+            return RM_HW_POR;
     }
 }
 
@@ -72,6 +73,7 @@ void reboot_init(void) {
     CFMgr_getOrAddElement(CFG_UTIL_KEY_REBOOTREASON, &_rebootReasonList, REBOOT_LIST_SZ+1);
     if (_rebootReasonList[REBOOT_LIST_SZ]>REBOOT_LIST_SZ) {
         log_noout("reboot list index is bad %d", _rebootReasonList[REBOOT_LIST_SZ]);
+        // Reset index
         _rebootReasonList[REBOOT_LIST_SZ] = 0;
     }
     // If last reboot due to hw reset (ie didn't go via the RMMgr_reboot() call), then ask HAL for more details
@@ -135,6 +137,7 @@ uint16_t RMMgr_getResetReasonCode() {
     // Recovered from PROM at boot time
     return _appReasonCode + (hal_reset_cause() << 8);
 }
+/* Get reset reason codes buffer, in order of most recent reset first */
 void RMMgr_getResetReasonBuffer(uint8_t* buf, uint8_t sz) {
     for(int i=0; i<sz; i++) {
         buf[i] = _rebootReasonList[(_rebootReasonList[REBOOT_LIST_SZ]-(i+1) + REBOOT_LIST_SZ) % REBOOT_LIST_SZ];
@@ -142,7 +145,10 @@ void RMMgr_getResetReasonBuffer(uint8_t* buf, uint8_t sz) {
 }
 
 bool RMMgr_wasHardReset() {
-    return (_appReasonCode == RM_HARD_RESET);
+    return (_appReasonCode == RM_HW_BROWNOUT ||
+        _appReasonCode ==  RM_HW_WG ||
+        _appReasonCode == RM_HW_NRST ||
+        _appReasonCode == RM_HW_POR);
 }
 
 void RMMgr_saveAssertCaller(void* fnaddr) {
@@ -220,7 +226,9 @@ static void watchdog_task(void* arg) {
 static void app_watchdog_timeoutcb(struct os_event *d) {
     // are we enabled, and if so, did we get tickled recently?
     if (_awctx.isEnabled && (TMMgr_getRelTimeSecs()-_awctx.last_tickleTS) > _awctx.timeoutMS) {
-        // no, bye bye via assert
+        // no, bye bye with software watchdog cause
+        RMMgr_reboot(RM_SW_WG);
+        // Should not return
         assert(0);
     }
     // yes, restart timer
