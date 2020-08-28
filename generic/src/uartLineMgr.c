@@ -256,7 +256,7 @@ static int uart_line_write(wskt_t* skt, uint8_t* data, uint32_t sz) {
         // if not, don't take any
         return SKT_NOSPACE;
     }
-    // IRQ disable TODO
+    // IRQ disable during update via OS_ENTER/EXIT_CRITICAL
     // copy it in
     for(int i=0; i<sz; i++) {
         os_sr_t sr;
@@ -371,7 +371,7 @@ static int uart_tx_cb(void* ctx) {
     // note that the circular buffer is protected from this IRQ CB via OS_ENTER/EXIT_CRITICAL() which disables IRQs
     uint8_t c;
     if (circ_bbuf_pop(&(myCfg->txBuff), &c)<0) {
-        // No more data to tx
+        // No more data to tx - tell user of device in case it wants to power down?
         return -1;
     }
     return c;
