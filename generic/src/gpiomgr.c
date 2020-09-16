@@ -426,6 +426,14 @@ static void onLPModeChange(LP_MODE_t current, LP_MODE_t next) {
             }
         }
     }
+    // ? do we (can we) stop gpio clocks? Need to check all the gpios on each block are off...
+    // What about gpios used by other code directly (maybe this is not allowed?) 
+    // what about if used as AF functions (ie not controlled here)?
+    // TODO
+    // __HAL_RCC_GPIOA_CLK_DISABLE();
+    // __HAL_RCC_GPIOB_CLK_DISABLE();
+    // __HAL_RCC_GPIOC_CLK_DISABLE();
+    // __HAL_RCC_GPIOD_CLK_DISABLE();
     // release mutex
 //    os_mutex_release(&_gpiomutex);
 

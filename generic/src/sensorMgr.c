@@ -100,8 +100,10 @@ static bool config();
 static bool readEnv();
 static void deconfig();
 static uint32_t delta(int a, int b);
+static uint8_t deltaPercent(int a, int b);
 static void buttonCheckDebounced(struct os_event* e);
 static uint8_t mapButton(int in);
+static LIGHT_STATE_t mapLight(uint8_t reading);
 
 // Called from sysinit
 void SRMgr_init(void) 
@@ -293,6 +295,7 @@ uint32_t SRMgr_getLastButtonReleaseTS(int8_t io)
 bool SRMgr_hasTempChanged() 
 {
     readEnv();      // ensure uptodate
+    // significant if > 0,5 degC [values are in 1/100th deg]
     return (delta(_ctx.currTempcC, _ctx.lastTempcC)>50);
 }
 int16_t SRMgr_getTempcC() 
@@ -309,7 +312,8 @@ void SRMgr_updateTemp()
 bool SRMgr_hasPressureChanged() 
 {
     readEnv();      // ensure uptodate
-    return (delta(_ctx.currPressurePa, _ctx.lastPressurePa)>10);
+    // significatif if > 1hPa. Values are in Pa
+    return (delta(_ctx.currPressurePa, _ctx.lastPressurePa)>100);
 }
 int32_t SRMgr_getPressurePa() 
 {
@@ -325,7 +329,8 @@ void SRMgr_updatePressure()
 bool SRMgr_hasBattChanged() 
 {
     readEnv();      // ensure uptodate
-    return (delta(_ctx.currBattmV, _ctx.lastBattmV)>50);
+    // change of >100mV is significatif (values are in mV)
+    return (delta(_ctx.currBattmV, _ctx.lastBattmV)>100);
 }
 uint16_t SRMgr_getBatterymV() 
 {
@@ -341,13 +346,23 @@ void SRMgr_updateBatt()
 bool SRMgr_hasLightChanged() 
 {
     readEnv();      // ensure uptodate
-    return (delta(_ctx.currLight, _ctx.lastLight)>10);
+    // Light level changes are very variable in daylight. Avoid generating too many UL...
+    // Map to 'dark', 'interier', 'daylight' and only signal as change if changes state
+    LIGHT_STATE_t cs = mapLight(_ctx.currLight);
+    LIGHT_STATE_t ls = mapLight(_ctx.lastLight);
+//    return (deltaPercent(_ctx.currLight, _ctx.lastLight) > 20);
+    return cs != ls;
 }
 uint8_t SRMgr_getLight() 
 {
     readEnv();
     return _ctx.currLight;
 }
+
+LIGHT_STATE_t SRMgr_getLightState() {
+    return mapLight(SRMgr_getLight());
+}
+
 void SRMgr_updateLight() 
 {
     readEnv();
@@ -373,7 +388,8 @@ uint8_t SRMgr_getNoiseLeveldB()
 bool SRMgr_hasADC1Changed() 
 {
     readEnv();      // ensure uptodate
-    return (delta(_ctx.currADC1mV, _ctx.lastADC1mV)>50);
+    // Significatif if >1%
+    return (deltaPercent(_ctx.currADC1mV, _ctx.lastADC1mV)>5);
 }
 uint16_t SRMgr_getADC1mV() 
 {
@@ -388,7 +404,7 @@ void SRMgr_updateADC1()
 bool SRMgr_hasADC2Changed() 
 {
     readEnv();      // ensure uptodate
-    return (delta(_ctx.currADC2mV, _ctx.lastADC2mV)>50);
+    return (deltaPercent(_ctx.currADC2mV, _ctx.lastADC2mV)>5);
 }
 uint16_t SRMgr_getADC2mV() 
 {
@@ -527,6 +543,7 @@ static bool config()
 
 
 // read stuff into current values
+// TODO add ability to average/smooth certain values?
 static bool readEnv() 
 {
     bool ret=true;
@@ -541,13 +558,13 @@ static bool readEnv()
         }
         if (BATTERY_GPIO>=0) 
         {
-            _ctx.currBattmV = GPIO_readADC(BATTERY_GPIO);
-            int ref_voltage = ( uint32_t )ADC_VREF_BANDGAP * ( uint32_t )ADC_MAX_VALUE;
-            // We don't use the VREF from calibValues here.
+            int newvalue = GPIO_readADC(BATTERY_GPIO);       
+            // We don't use the VREF from calibValues here, rather a constant calculation
             // calculate the Voltage in millivolt
-            if (_ctx.currBattmV > 0) {
-                _ctx.currBattmV = ref_voltage / ( uint32_t )_ctx.currBattmV;
+            if (newvalue > 0) {
+                newvalue = ( uint32_t )ADC_VREF_BANDGAP * ( uint32_t )ADC_MAX_VALUE / ( uint32_t )newvalue;
             }
+            _ctx.currBattmV = (newvalue + _ctx.currBattmV)/2;   // Average it a little as battery value changes slowly over time
 //            log_debug("S bat %d", _ctx.currBattmV);
         }
         if (LIGHT_SENSOR>=0) 
@@ -626,6 +643,22 @@ static void deconfig()
         // config noise detector on micro
         // TODO
     }
+}
+
+// map light level to a state
+static LIGHT_STATE_t mapLight(uint8_t reading) {
+    if (reading < 2) {
+        return DARK;
+    } else if (reading <25) {
+        return INTERIER;
+    } else {
+        return DAYLIGHT;
+    }
+}
+// Change in percent between two values
+static uint8_t deltaPercent(int a, int b) {
+    int r = max(max(a,b),1);
+    return ((delta(a,b)*100)/r);
 }
 
 static uint32_t delta(int a, int b) 

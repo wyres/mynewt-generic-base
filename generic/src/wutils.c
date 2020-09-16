@@ -464,7 +464,7 @@ uint8_t Util_hexbyte( const char* hex )
     return (Util_hexdigit(*hex) << 4) | Util_hexdigit(*(hex+1));
 }
 /** convert a hex string to a byte array to avoid sscanf. Ensure 'out' is at least of size 'len'. Returns number of bytes successfully found */
-int Util_scanhex(char* in, int len, uint8_t* out) {
+int Util_scanhex(const char* in, int len, uint8_t* out) {
     for(int i=0;i<len;i++) {
         // Check haven't reach string end and that chars are hex digits
         if (in[i*2]=='\0' || !isxdigit(in[i*2]) || !isxdigit(in[i*2+1])) {

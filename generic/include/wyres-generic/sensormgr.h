@@ -26,6 +26,8 @@ typedef void (*SR_BUTTON_CBFN_t)(void* ctx, SR_BUTTON_STATE_t currentState, SR_B
 
 typedef void (*SR_NOISE_CBFN_t)(void* ctx, int noiseFreq, int noiseDBm);
 
+typedef enum { DARK, INTERIER, DAYLIGHT } LIGHT_STATE_t;
+
 /** 
  * startup sensors ready for reading. Returns true if all ok, false if hw issue
  */
@@ -52,6 +54,7 @@ int16_t SRMgr_getTempcC();
 int32_t SRMgr_getPressurePa();
 uint16_t SRMgr_getBatterymV();
 uint8_t SRMgr_getLight();
+LIGHT_STATE_t SRMgr_getLightState();
 uint16_t SRMgr_getADC1mV();
 uint16_t SRMgr_getADC2mV();
 uint8_t SRMgr_getButton(int8_t io);
