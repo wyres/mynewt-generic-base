@@ -50,8 +50,13 @@ LP_ID_t LPMgr_register(LP_CBFN_t cb) {
     _ctx.lpUsers[_ctx.deviceCnt].cb=cb;     // May be NULL if user only changes the desired LP mode...
     _ctx.lpUsers[_ctx.deviceCnt].desiredMode=LP_DEEPSLEEP;      // start by assuming everyone is ok with deep sleep
     _ctx.deviceCnt++;
+
+    // Ensure next sleep mode is up to date including this new guy
+    _ctx.sleepMode = calcNextSleepMode();
+
     return id;
 }
+
 // THe level of sleeping when someone (the OS) asks to enter 'low power mode'
 void LPMgr_setLPMode(LP_ID_t id, LP_MODE_t m) {
     assert(id>=0 && id < MAX_LPCBFNS);
@@ -65,10 +70,6 @@ void LPMgr_setLPMode(LP_ID_t id, LP_MODE_t m) {
         log_warn("LP::%d:%d", m, _ctx.sleepMode);
     }
 */
-}
-LP_MODE_t LPMgr_getNextLPMode() {
-    _ctx.sleepMode = calcNextSleepMode();
-    return _ctx.sleepMode;
 }
 
 /* Hook functions round the 'idle' method. These allow the code to pause/resume external hw or other tasks.
