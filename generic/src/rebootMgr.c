@@ -25,7 +25,7 @@
 #include "wyres-generic/rebootmgr.h"
 #include "wyres-generic/timemgr.h"
 
-#define TICKLESS_DEBUG 0
+//#define TICKLESS_DEBUG 1
 
 // The max watchdog timeout this MCU can support
 // 28s for STM32
