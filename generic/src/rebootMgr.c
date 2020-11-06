@@ -25,13 +25,15 @@
 #include "wyres-generic/rebootmgr.h"
 #include "wyres-generic/timemgr.h"
 
+#define TICKLESS_DEBUG 0
+
 // The max watchdog timeout this MCU can support
 // 28s for STM32
 #define MAX_MCU_WATCHDOG_SECS (28)          
 
 // Led task should be high pri as does very little but wants to do it in real time
 #define WATCHDOG_TASK_PRIO       MYNEWT_VAL(WATCHDOG_TASK_PRIO)
-#define WATCHDOG_TASK_STACK_SZ   OS_STACK_ALIGN(64)
+#define WATCHDOG_TASK_STACK_SZ   OS_STACK_ALIGN(128)        //64)
 
 #define REBOOT_LIST_SZ  (8)
 #define FN_LIST_SZ  (8*8)   // for 8 entries, each of 2 uint32_ts
@@ -213,12 +215,52 @@ static struct {
     bool isHAL;     // should we use hal/hardware watchdog?
 } _awctx;
 
+#ifdef TICKLESS_DEBUG
+extern uint32_t QQQ_nsleep0;
+extern uint32_t QQQ_nsleepX;
+extern uint32_t QQQ_nstopX;
+extern uint32_t QQQ_total_reqsleepX;
+extern uint32_t QQQ_total_reqstopX;
+extern uint32_t QQQ_total_delta;
+extern uint32_t QQQ_total_slept;
+extern uint32_t QQQ_wakeups;
+
+#endif /* TICKLESS_DEBUG */
+
 // Task responsible for tickling watchdog (any kind) at least once during the timeout
 static void watchdog_task(void* arg) {
     while(1) {
         RMMgr_watchdog_tickle();
+#ifdef TICKLESS_DEBUG
+        // get time now via systick and rtc
+        uint32_t tock_systick = TMMgr_getRelTimeMS();
+        uint64_t tock_RTC = TMMgr_getRTCTimeMS();
+#endif
         // sleep for half watchdog timeout
         os_time_delay(os_time_ms_to_ticks32(_awctx.timeoutMS/2));
+#ifdef TICKLESS_DEBUG
+        // check we slept for a time we think is right
+        uint32_t dtSys = TMMgr_getRelTimeMS() - tock_systick;
+        uint32_t dtRTC = (uint32_t)(TMMgr_getRTCTimeMS() - tock_RTC);
+        if (QQQ_nsleepX==0) {
+            QQQ_nsleepX=1;
+        }
+        if (QQQ_nstopX==0) {
+            QQQ_nstopX=1;
+        }
+        log_warn("S[%u] R[%u], N0[%u], NWX[%u], NSX[%u], AVDX[%u], AVWX[%u],AVSX[%u], S[%u], W[%u]", dtSys, dtRTC, QQQ_nsleep0, QQQ_nsleepX, QQQ_nstopX,
+                QQQ_total_delta/(QQQ_nsleepX+QQQ_nstopX), QQQ_total_reqsleepX/QQQ_nsleepX, QQQ_total_reqstopX/QQQ_nstopX, QQQ_total_slept, QQQ_wakeups);
+        QQQ_nsleep0=0;
+        QQQ_nsleepX = 0;
+        QQQ_nstopX = 0;
+        QQQ_total_reqsleepX =0;
+        QQQ_total_reqstopX =0;
+        QQQ_total_delta=0;
+        QQQ_total_slept=0;
+        QQQ_wakeups=0;
+        os_time_delay(100);    // giving log o/p time to be done
+        log_check_uart_active();    // test to see if get more sleep in STOP due to debug uart knowing its idle
+#endif
     }
 }
 
