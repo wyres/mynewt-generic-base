@@ -68,8 +68,9 @@ int32_t TMMgr_deltaNow(uint32_t tMS) {
     return TMMgr_timeDelta(TMMgr_getRelTimeMS(), tMS);
 }
 
-void TMMgr_setBootTime(uint32_t tSecsSinceEpoch) {
-    _bootTimeSecs = tSecsSinceEpoch;
+void TMMgr_setTimeSecs(uint32_t tSecsSinceEpoch) {
+    // Adjust offset so that a get will get the right time
+    _bootTimeSecs = (tSecsSinceEpoch - TMMgr_getRelTimeSecs());
 }
 
 uint32_t TMMgr_busySleep(uint32_t ms) {

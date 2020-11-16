@@ -40,8 +40,8 @@ const char *TMMgr_isoTimeString(caltime_t* timep);
 uint32_t TMMgr_getRelTimeSecs();
 /* time in secs since epoch (if epoch relative boot time was set) */
 uint32_t TMMgr_getTimeSecs();
-/* set boot time in secs since epoch */
-void TMMgr_setBootTime(uint32_t tSecsEpoch);
+/* set time in secs since epoch (obtained from backend or gps or prom..) */
+void TMMgr_setTimeSecs(uint32_t tSecsEpoch);
 /* loop busily while time passes */
 uint32_t TMMgr_busySleep(uint32_t ms);
 

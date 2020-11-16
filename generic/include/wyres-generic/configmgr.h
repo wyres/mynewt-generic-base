@@ -69,6 +69,8 @@ void CFMgr_iterateKeys(int keymodule, CFG_CBFN_t cb, void* cbctx);
 #define CFG_UTIL_KEY_ACCELERO_SHOCK_DURATION     CFGKEY(CFG_MODULE_UTIL, 7)
 #define CFG_UTIL_KEY_ACCELERO_FREEFALL_DURATION  CFGKEY(CFG_MODULE_UTIL, 8)
 
+#define CFG_UTIL_KEY_REBOOT_TIME                 CFGKEY(CFG_MODULE_UTIL, 9)
+
 #ifdef __cplusplus
 }
 #endif

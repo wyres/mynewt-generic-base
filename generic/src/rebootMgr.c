@@ -69,6 +69,11 @@ static enum RM_reason mapHalResetCause() {
 
 // run at startup
 void reboot_init(void) {
+    // Get last known time from PROM
+    uint32_t nowInSecs = 0;
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_REBOOT_TIME, &nowInSecs, sizeof(nowInSecs));
+    TMMgr_setTimeSecs(nowInSecs);
+
     // get reboot reason from PROM
     // Its a circular list, last byte is current index
     memset(_rebootReasonList, 0, REBOOT_LIST_SZ+1);
@@ -126,12 +131,16 @@ void RMMgr_reboot(uint8_t reason) {
     _rebootReasonList[_rebootReasonList[REBOOT_LIST_SZ]] = reason;
     // Update PROM
     CFMgr_setElement(CFG_UTIL_KEY_REBOOTREASON, &_rebootReasonList, REBOOT_LIST_SZ+1);
+    // Store now time in PROM as the reboot time
+    uint32_t nowInSecs = TMMgr_getTimeSecs();
+    CFMgr_setElement(CFG_UTIL_KEY_REBOOT_TIME, &nowInSecs, sizeof(nowInSecs));
 
     // store fn tracker buffer in PROM/FLASH
     CFMgr_setElement(CFG_UTIL_KEY_FN_LIST, &_fnList, FN_LIST_SZ+1);
 
     hal_system_reset();
 }
+
 const char* RMMgr_getResetReason() {
     return _resetReason;
 }
