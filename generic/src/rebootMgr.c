@@ -240,17 +240,15 @@ extern uint32_t QQQ_wakeups;
 static void watchdog_task(void* arg) {
     while(1) {
         RMMgr_watchdog_tickle();
-#ifdef TICKLESS_DEBUG
         // get time now via systick and rtc
         uint32_t tock_systick = TMMgr_getRelTimeMS();
         uint64_t tock_RTC = TMMgr_getRTCTimeMS();
-#endif
         // sleep for half watchdog timeout
         os_time_delay(os_time_ms_to_ticks32(_awctx.timeoutMS/2));
-#ifdef TICKLESS_DEBUG
         // check we slept for a time we think is right
         uint32_t dtSys = TMMgr_getRelTimeMS() - tock_systick;
         uint32_t dtRTC = (uint32_t)(TMMgr_getRTCTimeMS() - tock_RTC);
+#ifdef TICKLESS_DEBUG
         if (QQQ_nsleepX==0) {
             QQQ_nsleepX=1;
         }
@@ -269,6 +267,13 @@ static void watchdog_task(void* arg) {
         QQQ_wakeups=0;
         os_time_delay(100);    // giving log o/p time to be done
         log_check_uart_active();    // test to see if get more sleep in STOP due to debug uart knowing its idle
+#else
+        // If logging possible then helpful sign of life every X seconds
+        log_warn("T[%u] dSYS[%u] dRTC[%u]", TMMgr_getTimeSecs(),dtSys, dtRTC);
+#if (MYNEWT_VAL(LOG_UART_ENABLED))
+        os_time_delay(100);    // giving log o/p time to be done
+        log_check_uart_active();    // test to see if get more sleep in STOP due to debug uart knowing its idle
+#endif
 #endif
     }
 }
