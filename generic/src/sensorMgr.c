@@ -28,6 +28,7 @@
 #include "wyres-generic/sensormgr.h"
 #include "wyres-generic/configmgr.h"
 #include "wyres-generic/ALTI_basic.h"
+#include "wyres-generic/HUMIDITY_basic.h"
 
 // debug : must disable ext-button reading if using it for debug output
 #if MYNEWT_VAL(UART_DBG)
@@ -78,10 +79,12 @@ static struct {
     uint16_t currBattmV;
     int32_t currPressurePa;
     uint8_t currLight;
+    int8_t currRelHumidity;
     int16_t lastTempcC;
     uint16_t lastBattmV;
     uint32_t lastPressurePa;
     uint8_t lastLight;
+    int8_t lastRelHumidity;
     uint32_t lastNoiseTS;   // in seconds since boot
     uint8_t noiseFreqkHz;
     uint8_t noiseLeveldB;
@@ -119,6 +122,12 @@ void SRMgr_init(void)
         log_warn("SM:Alti_init fail");
         // badness we stop here
         wassert_hw_fault();
+    }
+    // Try to find a humidity sensor
+    if (HUMIDITY_present() && HUMIDITY_init() != HUMIDITY_SUCCESS)
+    {
+        log_warn("SM:Humidity_init fail");
+        _ctx.currRelHumidity = -1;
     }
 
     // Register for to set desired low power mode. No need for callback to change setup
@@ -324,6 +333,27 @@ void SRMgr_updatePressure()
 {
     readEnv();
     _ctx.lastPressurePa = _ctx.currPressurePa;
+}
+
+
+bool SRMgr_hasRelHumidityChanged() 
+{
+    if (HUMIDITY_present()) {
+        readEnv();      // ensure uptodate
+        // significant if > 0,5 degC [values are in 1/100th deg]
+        return (delta(_ctx.currRelHumidity, _ctx.lastRelHumidity)>50);
+    } 
+    return false;
+}
+int8_t SRMgr_getRelHumidity() 
+{
+    readEnv();
+    return _ctx.currRelHumidity;        // value in 1/100 C
+}
+void SRMgr_updateRelHumidity() 
+{
+    readEnv();
+    _ctx.lastRelHumidity = _ctx.currRelHumidity;
 }
 
 bool SRMgr_hasBattChanged() 
@@ -534,6 +564,12 @@ static bool config()
             log_warn("SM:Erractivate alti");
             return false;
         }
+        // Only activate humidity sensor if we found one
+        if (HUMIDITY_present() && HUMIDITY_activate() != HUMIDITY_SUCCESS)
+        {
+            log_warn("SM:Erractivate humidity sensor");
+            return false;
+        }
 
         // config noise detector on micro
         // TODO
@@ -603,6 +639,12 @@ static bool readEnv()
             //            log_debug("SM:temp %d", _ctx.currTempdC);
             //            log_debug("SM:press %d", _ctx.currPressurePa);
         }
+        if (HUMIDITY_present() && HUMIDITY_readAllData(&_ctx.currRelHumidity, &_ctx.currTempcC) != HUMIDITY_SUCCESS)
+        {
+            log_warn("SM:Err read humidity");
+            ret = false;
+        } 
+
     }
     return ret;
 }
@@ -637,6 +679,10 @@ static void deconfig()
         if (ALTI_sleep() != ALTI_SUCCESS)
         {
             log_warn("SM:Err sleep alti");
+        }
+        if (HUMIDITY_present() && HUMIDITY_sleep() != HUMIDITY_SUCCESS)
+        {
+            log_warn("SM:Err deactivate humidity sensor");
         }
 
         // TODO
