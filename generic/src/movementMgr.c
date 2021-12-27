@@ -193,9 +193,19 @@ bool MMMgr_check()
         log_warn("mm: fall read failed");
         ret = false;
     }
-
-    if (ACC_readXYZ(&_ctx.x, &_ctx.y, &_ctx.z) == ACC_SUCCESS)
+    int8_t x=_ctx.x;
+    int8_t y=_ctx.y;
+    int8_t z=_ctx.z;
+    
+    if (ACC_readXYZ(&x, &y, &z) == ACC_SUCCESS)
     {
+        if (x!=_ctx.x || y!=_ctx.y || z!=_ctx.z) {
+            // change of orientation - record new values and update change timestamp
+            _ctx.x = x;
+            _ctx.y = y;
+            _ctx.z = z;
+            _ctx.lastOrientTimeS = TMMgr_getRelTimeSecs();
+        }
 //        log_debug("x:%d, y:%d, z:%d",_ctx.x, _ctx.y, _ctx.z);
     }
     else

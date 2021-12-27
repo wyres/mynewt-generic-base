@@ -559,8 +559,9 @@ static bool do_lora_send(TxLoraWanReq_t* req) {
 static void stack_joinTXUL_cb(void* uctx, LORAWAN_RESULT_t res) {
     LORAWAN_RESULT_t jres = LORAWAN_RES_NOT_JOIN;
     log_debug("LW: JCB %d", res);
-    if (res==LORAWAN_RES_OK) {
-        // mens join must have worked
+    // If ok result OR its a tx timeout but we got joined anyway, then its ok
+    if (res==LORAWAN_RES_OK || (res==LORAWAN_RES_TIMEOUT && lora_api_isJoined())) {
+        // means join must have worked
         jres = LORAWAN_RES_JOIN_OK;
         _loraCtx.isJoin = true;
     } else {
